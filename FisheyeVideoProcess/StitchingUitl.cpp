@@ -189,17 +189,27 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 	assert(left.channels() == 1);
 	assert(right.channels() == 1);
 
-	const int minHessian = 600;
-
-	SurfFeatureDetector detector(minHessian);
-	std::vector<KeyPoint> kptL, kptR;
-	detector.detect(left, kptL);
-	detector.detect(right, kptR);
+	assert(sType == SELF_SIFT || sType == SELF_SURF);
 
 	Mat desL, desR;
-	SurfDescriptorExtractor extractor;
-	extractor.compute(left, kptL, desL);
-	extractor.compute(right, kptR, desR);
+	std::vector<KeyPoint> kptL, kptR;
+
+	if (sType == SELF_SIFT) {
+		SiftFeatureDetector siftFD;
+		SiftDescriptorExtractor siftDE;
+		siftFD.detect(left, kptL);
+		siftFD.detect(right, kptR);
+		siftDE.compute(left, kptL, desL);
+		siftDE.compute(right, kptR, desR);
+	} else {
+		const int minHessian = 600;
+		SurfFeatureDetector surfFD(minHessian);
+		SurfDescriptorExtractor surfDE;
+		surfFD.detect(left, kptL);
+		surfFD.detect(right, kptR);
+		surfDE.compute(left, kptL, desL);
+		surfDE.compute(right, kptR, desR);
+	}
 
 	FlannBasedMatcher matcher;
 	std::vector<DMatch> matches;
@@ -283,6 +293,59 @@ void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, Stitc
 	}
 }
 
+void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
+	std::vector<Mat> srcsGrayScale;
+	std::vector<std::pair<Point2f, Point2f>> matchedPair;
+	Mat tmp, tmpGrayScale, tmp2;
+	switch (sType) {
+	case OPENCV_DEFAULT:
+	case OPENCV_TUNED:
+		opencvStitching(srcs, dstImage, sType);
+		break;
+	case FACEBOOK:
+	case SELF_SURF:
+		getGrayScale(srcs, srcsGrayScale);
+		tmp = srcs[0].clone(), tmpGrayScale = srcsGrayScale[0].clone();
+		for (int i=1; i<srcs.size(); ++i) {
+			matchedPair.clear();
+			sType == FACEBOOK
+				? facebookKeyPointMatching(tmpGrayScale, srcsGrayScale[i], matchedPair)
+				: selfKeyPointMatching(tmpGrayScale, srcsGrayScale[i], matchedPair, sType);
+			selfStitchingSAfterMatching(tmpGrayScale, srcsGrayScale[i], tmp, srcs[i], matchedPair, tmp2);
+			tmp = tmp2.clone();
+			cvtColor(tmp, tmpGrayScale, CV_RGB2GRAY);
+		}
+		dstImage = tmp;
+		break;
+	default:
+		assert(false);
+	}
+}
+
+void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, StitchingPolicy sp) {
+	// assumes srcs[0] is the front angle of view
+	// TODO: A lot
+	switch(sp) {
+	case STITCH_ONE_SIDE:
+		_stitch(srcs, dstImage, sType);
+		break;
+	case STITCH_DOUBLE_SIDE:
+		break;
+	default:
+		assert(false);
+	}
+
+}
+
+
+void StitchingUtil::getGrayScale(std::vector<Mat> &src, std::vector<Mat> &dst) {
+	for (int i=0; i<src.size(); ++i) {
+		Mat tmp;
+		cvtColor(src[i], tmp, CV_RGB2GRAY);
+		dst.push_back(tmp);
+	}
+	assert(src.size() == dst.size());
+}
 
 void StitchingUtil::unzipMatchedPair(
 	std::vector<std::pair<Point2f, Point2f>> &matchedPair, std::vector<Point2f> &matchedL, std::vector<Point2f> &matchedR) {
