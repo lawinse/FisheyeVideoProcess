@@ -311,7 +311,7 @@ void CorrectingUtil::rotateEarth(double &x, double &y, double &z) {
 	Mat curP(Point3f(x,y,z));
 	std::vector<Point3f> pts;
 
-	//TOFIGUREOUT: Why rotate the earth east-wards and south-wards
+	//TOSOLVE: Why rotate the earth east-wards and south-wards
 	const double theta_left = 0;
 	const double phi_up = 0;
 	pts.push_back(Point3f(cos(theta_left),0,sin(theta_left)));

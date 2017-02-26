@@ -1,5 +1,7 @@
 #include "StitchingUtil.h"
 #include <opencv2\features2d\features2d.hpp>
+#include <opencv2\nonfree\features2d.hpp>
+#include <opencv2\nonfree\nonfree.hpp>
 
 using namespace cv::detail;
 
@@ -37,7 +39,7 @@ void StitchingUtil::matchWithBRISK(
 	matcher.match(descL, descR, flannMatches);
 
 	double maxDist = 0;
-	double minDist = std::numeric_limits<float>::max() ;
+	double minDist = std::numeric_limits<float>::max();
 	for(int i = 0; i < flannMatches.size(); ++i) {
 		double dist = flannMatches[i].distance;
 		maxDist = max(maxDist, dist);
@@ -141,6 +143,10 @@ void StitchingUtil::matchWithAKAZE(
 #endif
 
 void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair) {
+	// input Mat must be grayscale
+	assert(left.channels() == 1);
+	assert(right.channels() == 1);
+
 	vector<std::pair<Point2f, Point2f>> matchPointPairsLRAll;
 	matchWithBRISK(left, right, matchPointPairsLRAll);
 	matchWithORB(left, right, matchPointPairsLRAll);
@@ -176,4 +182,112 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 			matchedPair.push_back(std::make_pair(matchesL[i], matchesR[i]));
 		}
 	}
+}
+
+void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair, StitchingType sType) {
+	// input Mat must be grayscale
+	assert(left.channels() == 1);
+	assert(right.channels() == 1);
+
+	const int minHessian = 600;
+
+	SurfFeatureDetector detector(minHessian);
+	std::vector<KeyPoint> kptL, kptR;
+	detector.detect(left, kptL);
+	detector.detect(right, kptR);
+
+	Mat desL, desR;
+	SurfDescriptorExtractor extractor;
+	extractor.compute(left, kptL, desL);
+	extractor.compute(right, kptR, desR);
+
+	FlannBasedMatcher matcher;
+	std::vector<DMatch> matches;
+	matcher.match(desL, desR, matches);
+
+	double maxDist = 0;
+	double minDist = std::numeric_limits<float>::max();
+	for (int i=0, double dis; i<desL.rows; ++i) {
+		dis = matches[i].distance;
+		minDist = min(dis, minDist);
+		maxDist = max(dis, maxDist);
+	}
+
+	// USe only Good macthes (distance less than 3*minDist)
+	std::vector<DMatch> goodMatches;
+	for (int i=0; i<desL.rows; ++i) {
+		if (matches[i].distance < 3*minDist)
+			goodMatches.push_back(matches[i]);
+	}
+	
+	for (int i=0; i<goodMatches.size(); ++i) {
+		matchedPair.push_back(std::make_pair(kptL[goodMatches[i].queryIdx].pt, kptR[goodMatches[i].trainIdx].pt));
+	}
+}
+
+void StitchingUtil::selfStitchingSAfterMatching(
+	Mat &left, Mat &right, Mat &leftOri, Mat &rightOri, std::vector<std::pair<Point2f, Point2f>> &matchedPair, Mat &dstImage) {
+	// input mat should be colored ones
+	std::vector<Point2f> matchedL, matchedR;
+	unzipMatchedPair(matchedPair, matchedL, matchedR);
+
+	Mat H = findHomography(left, right, CV_RANSAC);
+	warpPerspective(leftOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows));
+	Mat half(dstImage, Rect(0,0,rightOri.cols,rightOri.rows));
+	rightOri.copyTo(half);
+
+	// TOSOLVE: how to add blend manually
+}
+
+Stitcher StitchingUtil::opencvStitcherBuild(StitchingType sType) {
+	Stitcher s = Stitcher::createDefault(0);
+	if (sType == OPENCV_DEFAULT) return s;
+	s.setRegistrationResol(0.3);					//0.6 by default, smaller the faster
+	s.setPanoConfidenceThresh(1);					//1 by default, 0.6 or 0.4 worth a try
+	s.setWaveCorrection(false);						//true by default, set false for acceleration
+	const bool useORB = false;						// ORB is faster but less stable
+	s.setFeaturesFinder(useORB ? (FeaturesFinder*)(new OrbFeaturesFinder()) : (FeaturesFinder*)(new SurfFeaturesFinder()));
+	s.setFeaturesMatcher(new BestOf2NearestMatcher(false, 0.5f /* 0.65 by default */));
+	s.setBundleAdjuster(new BundleAdjusterRay());	// faster
+	s.setSeamFinder(new NoSeamFinder);
+	s.setExposureCompensator(new NoExposureCompensator);
+	s.setBlender(new FeatherBlender);				// multiBandBlender byb default, this is faster
+	return s;
+}
+
+
+void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
+	assert(sType <= OPENCV_TUNED);
+	static Stitcher s = opencvStitcherBuild(sType);
+	Stitcher::Status status;
+	switch (sType) {
+	case OPENCV_DEFAULT:
+		status = s.stitch(srcs, dstImage);
+		if (Stitcher::OK != status) {
+			std::cout << "Cannot stitch the image, errCode = " << status << std::endl;
+			assert(false);
+		}
+		break;
+	case OPENCV_TUNED:
+		status = s.estimateTransform(srcs);
+		if (Stitcher::OK != status) {
+			std::cout << "Cannot stitch the image, error in estimateTranform, errCode = " << status << std::endl;
+		}
+		status = s.composePanorama(dstImage);
+				if (Stitcher::OK != status) {
+			std::cout << "Cannot stitch the image, error in composePanorama, errCode = " << status << std::endl;
+		}
+		break;
+	default:
+		assert(false);
+	}
+}
+
+
+void StitchingUtil::unzipMatchedPair(
+	std::vector<std::pair<Point2f, Point2f>> &matchedPair, std::vector<Point2f> &matchedL, std::vector<Point2f> &matchedR) {
+		matchedL.clear(); matchedR.clear();
+		for (int i=0; i<matchedPair.size(); ++i) {
+			matchedL.push_back(matchedPair[i].first);
+			matchedR.push_back(matchedPair[i].second);
 }
