@@ -124,7 +124,7 @@ void Processor::process() {
 		}
 
 		for (int i=0; i<camCnt; ++i) {
-			fisheyeShirnk(srcFrms[i]); //TOSOLVE: Is it necessary?
+			// fisheyeShirnk(srcFrms[i]); // No need, confirmed.
 			fisheyeCorrect(srcFrms[i], dstFrms[i]);
 		}
 		

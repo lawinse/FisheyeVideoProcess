@@ -61,5 +61,4 @@ public:
 	CorrectingUtil(){};
 	~CorrectingUtil(){};
 	void doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cParams = CorrectingParams());
-	
 };

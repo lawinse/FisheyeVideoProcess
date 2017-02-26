@@ -342,6 +342,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 	
 	int u_src, v_src, u_dst, v_dst;
 	double lon_offset = (PI - camFieldAngle) / 2, lat_offset = (PI - camFieldAngle) / 2;
+	double mo;
 
 
 	for (int j=0; j<srcImage.rows; ++j)
@@ -360,14 +361,13 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 				x = i-center.x;
 				y = center.y-j;
 				z = focusLen;
-				double mo = sqrt(square(x) + square(y) + square(z));
+				mo = sqrt(square(x) + square(y) + square(z));
 				x /= mo;
 				y /= mo;
 				z /= mo;
 				rotateEarth(x,y,z);
 
 				break;
-
 			default:
 				assert(false);
 			}
