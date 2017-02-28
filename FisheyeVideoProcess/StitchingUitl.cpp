@@ -2,7 +2,6 @@
 #include <opencv2\features2d\features2d.hpp>
 #ifdef OPENCV_3
 	#include <opencv2\stitching\detail\matchers.hpp>
-	#include<opencv2\stitching.hpp>
 	#include<opencv2\xfeatures2d\nonfree.hpp>
 #else
 	#include <opencv2\nonfree\features2d.hpp>
@@ -162,7 +161,7 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 
 
 	// Remove duplicate keypoints
-	sort(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end());
+	sort(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end(), _cmp_pp2f);
 	matchPointPairsLRAll.erase(
 		std::unique(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end()),
 		matchPointPairsLRAll.end());
@@ -201,11 +200,15 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 	std::vector<KeyPoint> kptL, kptR;
 	const int minHessian = 600;
 #ifdef OPENCV_3
-		Ptr<FeatureDetector> DE = sType == SELF_SIFT
-			? cv::xfeatures2d::SIFT::create()
-			: cv::xfeatures2d::SURF::create(minHessian);
+	if (sType == SELF_SIFT) {
+		Ptr<FeatureDetector> DE = cv::xfeatures2d::SIFT::create();
 		DE->detectAndCompute(left, noArray(), kptL, desL);
 		DE->detectAndCompute(right, noArray(), kptR, desR);
+	} else {
+		Ptr<FeatureDetector> DE = cv::xfeatures2d::SURF::create(minHessian);
+		DE->detectAndCompute(left, noArray(), kptL, desL);
+		DE->detectAndCompute(right, noArray(), kptR, desR);
+	}
 #else
 	if (sType == SELF_SIFT) {
 		SiftFeatureDetector siftFD;
@@ -229,7 +232,8 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 
 	double maxDist = 0;
 	double minDist = std::numeric_limits<float>::max();
-	for (int i=0, double dis; i<desL.rows; ++i) {
+	double dis;
+	for (int i=0; i<desL.rows; ++i) {
 		dis = matches[i].distance;
 		minDist = min(dis, minDist);
 		maxDist = max(dis, maxDist);
@@ -360,9 +364,18 @@ void StitchingUtil::getGrayScale(std::vector<Mat> &src, std::vector<Mat> &dst) {
 }
 
 void StitchingUtil::unzipMatchedPair(
-	std::vector<std::pair<Point2f, Point2f>> &matchedPair, std::vector<Point2f> &matchedL, std::vector<Point2f> &matchedR) {
+	std::vector< std::pair<Point2f, Point2f> > &matchedPair, std::vector<Point2f> &matchedL, std::vector<Point2f> &matchedR) {
 		matchedL.clear(); matchedR.clear();
 		for (int i=0; i<matchedPair.size(); ++i) {
 			matchedL.push_back(matchedPair[i].first);
 			matchedR.push_back(matchedPair[i].second);
+		}
+}
+
+bool StitchingUtil::_cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b) {
+	return a.first == b.first ? _cmp_p2f(a.second, b.second) : _cmp_p2f(a.first, b.first);
+}
+
+bool StitchingUtil::_cmp_p2f(const Point2f &a, const Point2f &b) {
+	return a.x == b.x ? a.y < b.y : a.x < b.x;
 }

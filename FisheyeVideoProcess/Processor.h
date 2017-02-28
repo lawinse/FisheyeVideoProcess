@@ -6,7 +6,7 @@ class Processor {
 private:
 	VideoCapture vCapture[2];	// 0 stands for front and 1 stands for back, maybe more cam
 	VideoWriter vWriter;
-	const int camCnt = 2;
+	#define camCnt 2
 
 	int radiusOfCircle;
 	Point2i centerOfCircleBeforeResz;

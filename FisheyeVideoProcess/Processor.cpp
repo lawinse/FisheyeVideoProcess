@@ -88,7 +88,13 @@ void Processor::fisheyeShirnk(Mat &frm) {
 
 void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	//TODO: To apply different type of correction
-	CorrectingUtil().doCorrect(src, dst);
+
+	CorrectingUtil().doCorrect(src, dst, 
+		CorrectingParams(
+			PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
+			centerOfCircleAfterResz,
+			radiusOfCircle,
+			LONG_LAT));
 }
 
 void Processor::process() {
@@ -127,9 +133,6 @@ void Processor::process() {
 			// fisheyeShirnk(srcFrms[i]); // No need, confirmed.
 			fisheyeCorrect(srcFrms[i], dstFrms[i]);
 		}
-		
-		
-
 		
 
 	}

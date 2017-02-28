@@ -12,6 +12,8 @@ enum CorrectingType {
 
 	PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_FORWARD,
 	PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
+
+	OPENCV,
 };
 
 enum DistanceMappingType {
@@ -46,7 +48,7 @@ struct CorrectingParams {
 
 class CorrectingUtil {
 private:
-	const double camFieldAngle = PI;
+	#define camFieldAngle PI
 
 	void basicCorrecting(Mat &src, Mat &dst, CorrectingType ctype);
 	void LLMCorrecting(Mat &src, Mat &dst, Point2i center, int radius, CorrectingType ctype);

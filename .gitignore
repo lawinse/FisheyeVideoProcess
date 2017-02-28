@@ -8,8 +8,10 @@ Desktop.ini
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
 
-# Debug
+# Debug,Release
 Debug/
+Release/
+Resources/
 
 #ProPS
 *.props
@@ -51,3 +53,4 @@ Debug/
 Network Trash Folder
 Temporary Items
 .apdisk
+*.mp4

@@ -172,12 +172,13 @@ void CorrectingUtil::LLMCorrecting(
 	int u_src, v_src, u_dst, v_dst;
 
 	double lon_offset = (PI - camFieldAngle) / 2, lat_offset = (PI - camFieldAngle) / 2;
+	int left,top;
 
 	switch (ctype) {
 	// @Deprecated
 	case LONG_LAT_MAPPING_FORWARD:
-		int left = center.x - radius; assert(left == 0);
-		int top = center.y - radius; assert(top == 0);
+		left = center.x - radius; assert(left == 0);
+		top = center.y - radius; assert(top == 0);
 
 		for (int j=top; j<top+2*radius; ++j)
 			for (int i=left; i<left+2*radius; ++i) {
@@ -371,6 +372,10 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 			default:
 				assert(false);
 			}
+
+			theta_sphere = acos(z);
+			phi_sphere = cvFastArctan(y,x)*PI/180;
+
 			p_pol = f*theta_sphere;
 			theta_pol = phi_sphere;
 
