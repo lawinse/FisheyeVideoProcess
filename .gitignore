@@ -11,6 +11,9 @@ $RECYCLE.BIN/
 # Debug
 Debug/
 
+#ProPS
+*.props
+
 # Windows Installer files
 *.cab
 *.msi

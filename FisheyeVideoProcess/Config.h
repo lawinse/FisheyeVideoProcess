@@ -4,16 +4,18 @@
 #include <opencv2\opencv.hpp>
 #include <opencv2\core\core.hpp>
 #include <opencv2\highgui\highgui.hpp>
-#include <opencv2\stitching\stitcher.hpp>
 #include <assert.h>
 #include <string>
 
 #define PI 3.14159265358979323846
 
 
-//#define OPENCV_3
+#define OPENCV_3
 #ifndef OPENCV_3
 	#define OPENCV_2
+	#include <opencv2\stitching\stitcher.hpp>
+#else
+	#include <opencv2\stitching\warpers.hpp>
 #endif
 
 using namespace cv;

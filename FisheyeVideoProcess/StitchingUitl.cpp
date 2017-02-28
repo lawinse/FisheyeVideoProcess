@@ -1,7 +1,13 @@
 #include "StitchingUtil.h"
 #include <opencv2\features2d\features2d.hpp>
-#include <opencv2\nonfree\features2d.hpp>
-#include <opencv2\nonfree\nonfree.hpp>
+#ifdef OPENCV_3
+	#include <opencv2\stitching\detail\matchers.hpp>
+	#include<opencv2\stitching.hpp>
+	#include<opencv2\xfeatures2d\nonfree.hpp>
+#else
+	#include <opencv2\nonfree\features2d.hpp>
+	#include <opencv2\nonfree\nonfree.hpp>
+#endif
 
 using namespace cv::detail;
 
@@ -16,8 +22,8 @@ void StitchingUtil::matchWithBRISK(
 
 #ifdef OPENCV_3
 	Ptr<BRISK> brisk = BRISK::create();
-	brisk->detectAndCompute(imageL, noArray(), kptsL, descL);
-	brisk->detectAndCompute(imageR, noArray(), kptsR, descR);
+	brisk->detectAndCompute(left, noArray(), kptsL, descL);
+	brisk->detectAndCompute(right, noArray(), kptsR, descR);
 #else
 	//TOSOLVE: 2.4.9-style incovation, not sure it works
 	const int Thresh = 60, Octave = 4;
@@ -35,7 +41,7 @@ void StitchingUtil::matchWithBRISK(
 
 	static const int kFlannNumTrees = 4;
 	FlannBasedMatcher matcher(new flann::KDTreeIndexParams(kFlannNumTrees));
-	vector<DMatch> flannMatches;
+	std::vector<DMatch> flannMatches;
 	matcher.match(descL, descR, flannMatches);
 
 	double maxDist = 0;
@@ -75,10 +81,10 @@ void StitchingUtil::matchWithORB(
 	finder(right, imgFeaturesR);
 	imgFeaturesR.img_idx = 1;
 
-	vector<ImageFeatures> features;
+	std::vector<ImageFeatures> features;
 	features.push_back(imgFeaturesL);
 	features.push_back(imgFeaturesR);
-	vector<MatchesInfo> pairwiseMatches;
+	std::vector<MatchesInfo> pairwiseMatches;
 	BestOf2NearestMatcher matcher(kUseGPU, kMatchConfidence);
 	matcher(features, pairwiseMatches);
 
@@ -101,8 +107,8 @@ void StitchingUtil::matchWithAKAZE(
 	static const double kFlannMaxDistThreshold = 0.04;
 
 	Mat descL, descR;
-	vector<KeyPoint> kptsL, kptsR;
-	vector<DMatch> goodMatches;
+	std::vector<KeyPoint> kptsL, kptsR;
+	std::vector<DMatch> goodMatches;
 
 	Ptr<AKAZE> akaze = AKAZE::create();
 	akaze->detectAndCompute(left, noArray(), kptsL, descL);
@@ -115,7 +121,7 @@ void StitchingUtil::matchWithAKAZE(
 	// KD-Tree param: # of parallel kd-trees
 	static const int kFlannNumTrees = 4;
 	FlannBasedMatcher matcher(new flann::KDTreeIndexParams(kFlannNumTrees));
-	vector<DMatch> flannMatches;
+	std::vector<DMatch> flannMatches;
 	matcher.match(descL, descR, flannMatches);
 
 	double maxDist = 0;
@@ -147,7 +153,7 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 	assert(left.channels() == 1);
 	assert(right.channels() == 1);
 
-	vector<std::pair<Point2f, Point2f>> matchPointPairsLRAll;
+	std::vector<std::pair<Point2f, Point2f>> matchPointPairsLRAll;
 	matchWithBRISK(left, right, matchPointPairsLRAll);
 	matchWithORB(left, right, matchPointPairsLRAll);
 #ifdef OPENCV_3
@@ -162,8 +168,8 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 		matchPointPairsLRAll.end());
 
 	// Apply RANSAC to filter weak matches (like, really weak)
-	vector<Point2f> matchesL, matchesR;
-	vector<uchar> inlinersMask;
+	std::vector<Point2f> matchesL, matchesR;
+	std::vector<uchar> inlinersMask;
 	for(int i = 0; i < matchPointPairsLRAll.size(); ++i) {
 		matchesL.push_back(matchPointPairsLRAll[i].first);
 		matchesR.push_back(matchPointPairsLRAll[i].second);
@@ -193,7 +199,14 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 
 	Mat desL, desR;
 	std::vector<KeyPoint> kptL, kptR;
-
+	const int minHessian = 600;
+#ifdef OPENCV_3
+		Ptr<FeatureDetector> DE = sType == SELF_SIFT
+			? cv::xfeatures2d::SIFT::create()
+			: cv::xfeatures2d::SURF::create(minHessian);
+		DE->detectAndCompute(left, noArray(), kptL, desL);
+		DE->detectAndCompute(right, noArray(), kptR, desR);
+#else
 	if (sType == SELF_SIFT) {
 		SiftFeatureDetector siftFD;
 		SiftDescriptorExtractor siftDE;
@@ -202,7 +215,6 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 		siftDE.compute(left, kptL, desL);
 		siftDE.compute(right, kptR, desR);
 	} else {
-		const int minHessian = 600;
 		SurfFeatureDetector surfFD(minHessian);
 		SurfDescriptorExtractor surfDE;
 		surfFD.detect(left, kptL);
@@ -210,7 +222,7 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 		surfDE.compute(left, kptL, desL);
 		surfDE.compute(right, kptR, desR);
 	}
-
+#endif
 	FlannBasedMatcher matcher;
 	std::vector<DMatch> matches;
 	matcher.match(desL, desR, matches);
