@@ -68,6 +68,7 @@ void CorrectingUtil::basicCorrecting(Mat &srcImage, Mat &dstImage, CorrectingTyp
 				dstImage.at<Vec3b>(i_dst, j_dst)[0] = srcImage.at<Vec3b>(i, j)[0];
 				dstImage.at<Vec3b>(i_dst, j_dst)[1] = srcImage.at<Vec3b>(i, j)[1];
 				dstImage.at<Vec3b>(i_dst, j_dst)[2] = srcImage.at<Vec3b>(i, j)[2];
+				pixelReMapping.set(std::make_pair(i,j), std::make_pair(i_dst,j_dst));
 
 			}
 		}
@@ -118,6 +119,7 @@ void CorrectingUtil::basicCorrecting(Mat &srcImage, Mat &dstImage, CorrectingTyp
 				dstImage.at<Vec3b>(i_dst, j_dst)[0] = srcImage.at<Vec3b>(i, j)[0];
 				dstImage.at<Vec3b>(i_dst, j_dst)[1] = srcImage.at<Vec3b>(i, j)[1];
 				dstImage.at<Vec3b>(i_dst, j_dst)[2] = srcImage.at<Vec3b>(i, j)[2];
+				pixelReMapping.set(std::make_pair(i,j), std::make_pair(i_dst,j_dst));
 
 			}
 		}
@@ -130,8 +132,13 @@ void CorrectingUtil::basicCorrecting(Mat &srcImage, Mat &dstImage, CorrectingTyp
 void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cParams) {
 	assert(srcImage.cols == srcImage.rows);		// Ensure to be a square
 	assert(srcImage.size() == dstImage.size());
-	switch (cParams.ctype)
-	{
+
+
+	if (cParams.use_reMap && pixelReMapping.isMapped() && cParams == _cParams) {
+		if (pixelReMapping.reMap(srcImage, dstImage)) return;
+	}
+
+	switch (cParams.ctype) {
 	case BASIC_FORWARD:
 	case BASIC_REVERSED:
 		basicCorrecting(srcImage, dstImage, cParams.ctype);
@@ -151,6 +158,7 @@ void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cP
 	default:
 		assert(false);
 	}
+	_cParams = cParams;
 }
 
 // LONG_LON_MAPPING
@@ -212,6 +220,7 @@ void CorrectingUtil::LLMCorrecting(
 				dstImage.at<Vec3b>(v_dst,u_dst)[0] = srcImage.at<Vec3b>(j,i)[0];
 				dstImage.at<Vec3b>(v_dst,u_dst)[1] = srcImage.at<Vec3b>(j,i)[1];
 				dstImage.at<Vec3b>(v_dst,u_dst)[2] = srcImage.at<Vec3b>(j,i)[2];
+				pixelReMapping.set(std::make_pair(j,i), std::make_pair(v_dst,u_dst));
 			}
 		break;
 	case LONG_LAT_MAPPING_REVERSED:
@@ -247,6 +256,7 @@ void CorrectingUtil::LLMCorrecting(
 				dstImage.at<Vec3b>(j,i)[0] = srcImage.at<Vec3b>(v_src,u_src)[0];
 				dstImage.at<Vec3b>(j,i)[1] = srcImage.at<Vec3b>(v_src,u_src)[1];
 				dstImage.at<Vec3b>(j,i)[2] = srcImage.at<Vec3b>(v_src,u_src)[2];
+				pixelReMapping.set(std::make_pair(v_src,u_src), std::make_pair(j,i));
 			}
 		}
 		break;
@@ -300,12 +310,13 @@ void CorrectingUtil::PLLMCLMCorrentingForward(Mat &srcImage, Mat &dstImage, Poin
 			dstImage.at<Vec3b>(j,i)[0] = srcImage.at<Vec3b>(v_src,u_src)[0];
 			dstImage.at<Vec3b>(j,i)[1] = srcImage.at<Vec3b>(v_src,u_src)[1];
 			dstImage.at<Vec3b>(j,i)[2] = srcImage.at<Vec3b>(v_src,u_src)[2];
+			pixelReMapping.set(std::make_pair(v_src,u_src), std::make_pair(j,i));
 		}
 }
 
 double CorrectingUtil::getPhiFromV(double v) {
 	double l = abs(2-v);
-	return (v>2) ? PI-asin(8/square(l)+4-1) : asin(8/square(l)+4-1);   // derived by simplification
+	return (v>2) ? PI-asin(8/(square(l)+4)-1) : asin(8/(square(l)+4)-1);   // derived by simplification
 }
 
 void CorrectingUtil::rotateEarth(double &x, double &y, double &z) {
@@ -348,6 +359,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 
 	for (int j=0; j<srcImage.rows; ++j)
 		for (int i=0; i<srcImage.cols; ++i) {
+			//std::cout << i << " " << j << std::endl;
 			switch (dmtype) {
 			case LONG_LAT:
 				lat = getPhiFromV((double)j*4.0/srcImage.rows);
@@ -391,7 +403,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 			dstImage.at<Vec3b>(j,i)[0] = srcImage.at<Vec3b>(v_src,u_src)[0];
 			dstImage.at<Vec3b>(j,i)[1] = srcImage.at<Vec3b>(v_src,u_src)[1];
 			dstImage.at<Vec3b>(j,i)[2] = srcImage.at<Vec3b>(v_src,u_src)[2];
+			pixelReMapping.set(std::make_pair(v_src,u_src), std::make_pair(j,i));
 		}
-
 }
 

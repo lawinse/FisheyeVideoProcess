@@ -2,7 +2,7 @@
 #include <opencv2\features2d\features2d.hpp>
 #ifdef OPENCV_3
 	#include <opencv2\stitching\detail\matchers.hpp>
-	#include<opencv2\xfeatures2d\nonfree.hpp>
+	#include <opencv2\xfeatures2d\nonfree.hpp>
 #else
 	#include <opencv2\nonfree\features2d.hpp>
 	#include <opencv2\nonfree\nonfree.hpp>
@@ -338,14 +338,16 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 	}
 }
 
-void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, StitchingPolicy sp) {
+void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp, StitchingType sType) {
 	// assumes srcs[0] is the front angle of view
-	// TODO: A lot
+	// TOSOLVE: Currently supports two srcs to stitch
+	assert(srcs.size() == 2);
 	switch(sp) {
-	case STITCH_ONE_SIDE:
-		_stitch(srcs, dstImage, sType);
+	case DIRECT:
+		
 		break;
 	case STITCH_DOUBLE_SIDE:
+		_stitch(srcs, dstImage, sType);
 		break;
 	default:
 		assert(false);

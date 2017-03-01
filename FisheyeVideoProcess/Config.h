@@ -15,9 +15,8 @@
 #define OPENCV_3
 #ifndef OPENCV_3
 	#define OPENCV_2
-	
 #else
-
+	//may define sth
 #endif
 
 using namespace cv;

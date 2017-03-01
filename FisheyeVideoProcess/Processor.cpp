@@ -2,6 +2,11 @@
 #include "CorrectingUtil.h"
 
 Processor::Processor() {
+	correctingUtil = CorrectingUtil();
+	stitchingUtil = StitchingUtil();
+}
+
+Processor::~Processor() {
 }
 
 void Processor::findFisheyeCircleRegion() {
@@ -88,13 +93,16 @@ void Processor::fisheyeShirnk(Mat &frm) {
 
 void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	//TODO: To apply different type of correction
-
-	CorrectingUtil().doCorrect(src, dst, 
+	correctingUtil.doCorrect(src, dst, 
 		CorrectingParams(
 			PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
 			centerOfCircleAfterResz,
 			radiusOfCircle,
 			LONG_LAT));
+}
+
+void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
+	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::DIRECT, StitchingType::OPENCV_DEFAULT);
 }
 
 void Processor::process() {

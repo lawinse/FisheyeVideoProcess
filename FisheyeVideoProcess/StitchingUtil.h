@@ -18,7 +18,7 @@ enum StitchingType {
 
 enum StitchingPolicy {
 	// Copy from the very first version
-	STITCH_ONE_SIDE,
+	DIRECT,
 	// Experimental
 	STITCH_DOUBLE_SIDE,
 };
@@ -54,6 +54,6 @@ public:
 	StitchingUtil(){};
 	~StitchingUtil(){};
 	
-	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, StitchingPolicy sp);
+	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_DOUBLE_SIDE, StitchingType sType = OPENCV_DEFAULT);
 };
 
