@@ -9,24 +9,22 @@
 #endif
 
 using namespace cv::detail;
-
+using namespace cv;
+#ifdef OPENCV_3
 void StitchingUtil::matchWithBRISK(
 	const Mat &left, const Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair) {
-	static const int kFlannMaxDistScale = 3;
-	static const double kFlannMaxDistThreshold = 0.04;
 
 	std::vector<KeyPoint> kptsL, kptsR;
 	Mat descL, descR;
 	std::vector<DMatch> goodMatches;
-
+	const int Thresh = 150, Octave = 3;
+	const float PatternScales = 4.0f;
 #ifdef OPENCV_3
-	Ptr<BRISK> brisk = BRISK::create();
-	brisk->detectAndCompute(left, noArray(), kptsL, descL);
-	brisk->detectAndCompute(right, noArray(), kptsR, descR);
+	Ptr<BRISK> brisk = BRISK::create(Thresh, Octave, PatternScales);
+	brisk->detectAndCompute(left, getMask(left,true), kptsL, descL);
+	brisk->detectAndCompute(right, getMask(right,false), kptsR, descR);
 #else
 	//TOSOLVE: 2.4.9-style incovation, not sure it works
-	const int Thresh = 60, Octave = 4;
-	const float PatternScales = 1.0f;
 	cv::BRISK briskDetector(Thresh, Octave, PatternScales);
 	briskDetector.create("Feature2D.BRISK");
 	briskDetector.detect(left, kptsL);
@@ -38,7 +36,6 @@ void StitchingUtil::matchWithBRISK(
 	descL.convertTo(descL, CV_32F);
 	descR.convertTo(descR, CV_32F);
 
-	static const int kFlannNumTrees = 4;
 	FlannBasedMatcher matcher(new flann::KDTreeIndexParams(kFlannNumTrees));
 	std::vector<DMatch> flannMatches;
 	matcher.match(descL, descR, flannMatches);
@@ -57,6 +54,8 @@ void StitchingUtil::matchWithBRISK(
 			goodMatches.push_back(flannMatches[i]);
 		}
 	}
+	showMatchingPair(left, kptsL, right, kptsR, goodMatches);
+
 
 	for (const DMatch& match : goodMatches) {
 		const Point2f& kptL = kptsL[match.queryIdx].pt;
@@ -70,14 +69,14 @@ void StitchingUtil::matchWithORB(
 	static const bool kUseGPU = false;
 	static const float kMatchConfidence = 0.4;
 
-	OrbFeaturesFinder finder;
+	detail::OrbFeaturesFinder finder;
 
 	ImageFeatures imgFeaturesL;
-	finder(left, imgFeaturesL);
+	finder(left, imgFeaturesL, getMaskROI(left, true));
 	imgFeaturesL.img_idx = 0;
 
 	ImageFeatures imgFeaturesR;
-	finder(right, imgFeaturesR);
+	finder(right, imgFeaturesR, getMaskROI(right,false));
 	imgFeaturesR.img_idx = 1;
 
 	std::vector<ImageFeatures> features;
@@ -96,29 +95,27 @@ void StitchingUtil::matchWithORB(
 			const Point2f& kptR = imgFeaturesR.keypoints[match.trainIdx].pt;
 			matchedPair.push_back(std::make_pair(kptL, kptR));
 		}
+		showMatchingPair(left, imgFeaturesL.keypoints, right, imgFeaturesR.keypoints, matchInfo.matches);
 	}
 }
 
-#ifdef OPENCV_3	/* AKAZE Required OPENCV 3.0+ */
+
 void StitchingUtil::matchWithAKAZE(
 	const Mat &left, const Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair) {
-	static const int kFlannMaxDistScale = 3;
-	static const double kFlannMaxDistThreshold = 0.04;
 
 	Mat descL, descR;
 	std::vector<KeyPoint> kptsL, kptsR;
 	std::vector<DMatch> goodMatches;
 
 	Ptr<AKAZE> akaze = AKAZE::create();
-	akaze->detectAndCompute(left, noArray(), kptsL, descL);
-	akaze->detectAndCompute(right, noArray(), kptsR, descR);
+	akaze->detectAndCompute(left, getMask(left, true), kptsL, descL);
+	akaze->detectAndCompute(right, getMask(right, false), kptsR, descR);
 
 	// FlannBasedMatcher with KD-Trees needs CV_32
 	descL.convertTo(descL, CV_32F);
 	descR.convertTo(descR, CV_32F);
 
 	// KD-Tree param: # of parallel kd-trees
-	static const int kFlannNumTrees = 4;
 	FlannBasedMatcher matcher(new flann::KDTreeIndexParams(kFlannNumTrees));
 	std::vector<DMatch> flannMatches;
 	matcher.match(descL, descR, flannMatches);
@@ -137,7 +134,7 @@ void StitchingUtil::matchWithAKAZE(
 			goodMatches.push_back(flannMatches[i]);
 		}
 	}
-
+	showMatchingPair(left, kptsL, right, kptsR, goodMatches);;
 	for (const DMatch& match : goodMatches) {
 		const Point2f& kptL = kptsL[match.queryIdx].pt;
 		const Point2f& kptR = kptsR[match.trainIdx].pt;
@@ -153,7 +150,11 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 	assert(right.channels() == 1);
 
 	std::vector<std::pair<Point2f, Point2f>> matchPointPairsLRAll;
-	matchWithBRISK(left, right, matchPointPairsLRAll);
+	//try {
+	//	matchWithBRISK(left, right, matchPointPairsLRAll);  /* BRISK seems not so good */
+	//} catch(...){
+	//	std::cout << "[Warning] matchingWithBrisk failed.";
+	//};
 	matchWithORB(left, right, matchPointPairsLRAll);
 #ifdef OPENCV_3
 	matchWithAKAZE(left, right, matchPointPairsLRAll);
@@ -176,8 +177,8 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 
 	static const int kRansacReprojThreshold = 100;
 	findHomography(
-		matchesL,
 		matchesR,
+		matchesL,
 		CV_RANSAC,
 		kRansacReprojThreshold,
 		inlinersMask);
@@ -198,18 +199,17 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 
 	Mat desL, desR;
 	std::vector<KeyPoint> kptL, kptR;
-	const int minHessian = 600;
-#ifdef OPENCV_3
+#if (defined OPENCV_3) && (defined  OPENCV3_CONTRIB)
 	if (sType == SELF_SIFT) {
 		Ptr<FeatureDetector> DE = cv::xfeatures2d::SIFT::create();
-		DE->detectAndCompute(left, noArray(), kptL, desL);
-		DE->detectAndCompute(right, noArray(), kptR, desR);
+		DE->detectAndCompute(left, getMask(left, true), kptL, desL);
+		DE->detectAndCompute(right, getMask(right, false), kptR, desR);
 	} else {
-		Ptr<FeatureDetector> DE = cv::xfeatures2d::SURF::create(minHessian);
-		DE->detectAndCompute(left, noArray(), kptL, desL);
-		DE->detectAndCompute(right, noArray(), kptR, desR);
+		Ptr<FeatureDetector> DE = cv::xfeatures2d::SURF::create();
+		DE->detectAndCompute(left, getMask(left, true), kptL, desL);
+		DE->detectAndCompute(right, getMask(right, false), kptR, desR);
 	}
-#else
+#elif (defined OPENCV_2)
 	if (sType == SELF_SIFT) {
 		SiftFeatureDetector siftFD;
 		SiftDescriptorExtractor siftDE;
@@ -226,7 +226,7 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 		surfDE.compute(right, kptR, desR);
 	}
 #endif
-	FlannBasedMatcher matcher;
+	FlannBasedMatcher matcher(new flann::KDTreeIndexParams(kFlannNumTrees));
 	std::vector<DMatch> matches;
 	matcher.match(desL, desR, matches);
 
@@ -242,10 +242,11 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 	// USe only Good macthes (distance less than 3*minDist)
 	std::vector<DMatch> goodMatches;
 	for (int i=0; i<desL.rows; ++i) {
-		if (matches[i].distance < 3*minDist)
+		if (matches[i].distance < max(kFlannMaxDistScale*minDist, kFlannMaxDistThreshold))
 			goodMatches.push_back(matches[i]);
 	}
-	
+
+	showMatchingPair(left, kptL, right, kptR, goodMatches);
 	for (int i=0; i<goodMatches.size(); ++i) {
 		matchedPair.push_back(std::make_pair(kptL[goodMatches[i].queryIdx].pt, kptR[goodMatches[i].trainIdx].pt));
 	}
@@ -257,10 +258,15 @@ void StitchingUtil::selfStitchingSAfterMatching(
 	std::vector<Point2f> matchedL, matchedR;
 	unzipMatchedPair(matchedPair, matchedL, matchedR);
 
-	Mat H = findHomography(left, right, CV_RANSAC);
-	warpPerspective(leftOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows));
-	Mat half(dstImage, Rect(0,0,rightOri.cols,rightOri.rows));
-	rightOri.copyTo(half);
+	const double ransacReprojThreshold = 5;
+	OutputArray mask=noArray();
+	const int maxIters = 2000;
+	const double confidence = 0.90;
+
+	Mat H = cv::findHomography(matchedR, matchedL, CV_RANSAC, ransacReprojThreshold, mask, maxIters, confidence);
+	warpPerspective(rightOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows), INTER_CUBIC);
+	Mat half(dstImage, Rect(0,0,leftOri.cols,leftOri.rows));
+	leftOri.copyTo(half);
 
 	// TOSOLVE: how to add blend manually
 }
@@ -278,6 +284,7 @@ Stitcher StitchingUtil::opencvStitcherBuild(StitchingType sType) {
 	s.setSeamFinder(new NoSeamFinder);
 	s.setExposureCompensator(new NoExposureCompensator);
 	s.setBlender(new FeatherBlender);				// multiBandBlender byb default, this is faster
+	//s.setWarper(new cv::CylindricalWarper());
 	return s;
 }
 
@@ -289,19 +296,22 @@ void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, Stitc
 	switch (sType) {
 	case OPENCV_DEFAULT:
 		status = s.stitch(srcs, dstImage);
+		
 		if (Stitcher::OK != status) {
-			std::cout << "Cannot stitch the image, errCode = " << status << std::endl;
+			std::cout << "[Error] Cannot stitch the image, errCode = " << status << std::endl;
 			assert(false);
 		}
 		break;
 	case OPENCV_TUNED:
 		status = s.estimateTransform(srcs);
 		if (Stitcher::OK != status) {
-			std::cout << "Cannot stitch the image, error in estimateTranform, errCode = " << status << std::endl;
+			std::cout << "[Error] Cannot stitch the image, error in estimateTranform, errCode = " << status << std::endl;
+			assert(false);
 		}
 		status = s.composePanorama(dstImage);
 				if (Stitcher::OK != status) {
-			std::cout << "Cannot stitch the image, error in composePanorama, errCode = " << status << std::endl;
+			std::cout << "[Error] Cannot stitch the image, error in composePanorama, errCode = " << status << std::endl;
+			assert(false);
 		}
 		break;
 	default:
@@ -320,6 +330,7 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 		break;
 	case FACEBOOK:
 	case SELF_SURF:
+	case SELF_SIFT:
 		getGrayScale(srcs, srcsGrayScale);
 		tmp = srcs[0].clone(), tmpGrayScale = srcsGrayScale[0].clone();
 		for (int i=1; i<srcs.size(); ++i) {
@@ -327,7 +338,7 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 			sType == FACEBOOK
 				? facebookKeyPointMatching(tmpGrayScale, srcsGrayScale[i], matchedPair)
 				: selfKeyPointMatching(tmpGrayScale, srcsGrayScale[i], matchedPair, sType);
-			selfStitchingSAfterMatching(tmpGrayScale, srcsGrayScale[i], tmp, srcs[i], matchedPair, tmp2);
+			selfStitchingSAfterMatching(tmpGrayScale, srcsGrayScale[i].clone(), tmp, srcs[i], matchedPair, tmp2);
 			tmp = tmp2.clone();
 			cvtColor(tmp, tmpGrayScale, CV_RGB2GRAY);
 		}
@@ -339,20 +350,40 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 }
 
 void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp, StitchingType sType) {
-	// assumes srcs[0] is the front angle of view
+	// assumes srcs[0] is the front angle of view, so srcs[1] needs cut
 	// TOSOLVE: Currently supports two srcs to stitch
-	assert(srcs.size() == 2);
+	assert(srcs.size() == 2);		
+	std::vector<Mat> matCut;
+	Mat tmp, forshow;
 	switch(sp) {
 	case DIRECT:
-		
+		matCut.clear();
+		matCut.push_back( // matCut[0]: left after cut
+			srcs[1](Range(0, srcs[1].rows), Range(round(srcs[1].cols/2)+1, srcs[1].cols)).clone());
+		matCut.push_back( // matCut[1]: right after cut
+			srcs[1](Range(0, srcs[1].rows), Range(0, round(srcs[1].cols/2)+1)).clone());
+
+		dstImage.create(srcs[0].rows, srcs[0].cols + matCut[1].cols + matCut[0].cols, srcs[0].type());
+		srcs[0].copyTo(dstImage(Rect(matCut[0].cols, 0, srcs[0].cols, srcs[0].rows)));
+		matCut[0].copyTo(dstImage(Rect(0, 0, matCut[0].cols, srcs[0].rows)));
+		matCut[1].copyTo(dstImage(Rect(matCut[0].cols + srcs[0].cols, 0, matCut[1].cols, srcs[0].rows)));
 		break;
-	case STITCH_DOUBLE_SIDE:
+	case STITCH_ONE_SIDE:
+		//std::swap(srcs[0], srcs[1]);
 		_stitch(srcs, dstImage, sType);
+		//// stitch another side
+		//matCut.clear();
+		//matCut.push_back(
+		//	tmp(Range(0, tmp.rows), Range(round(tmp.cols*2.0/3), tmp.cols)).clone());
+		//resize(dstImage, forshow, Size(matCut[0].cols/2, matCut[0].rows/2));
+		//imshow("windows",forshow);
+		//matCut.push_back(
+		//	tmp(Range(0, tmp.rows), Range(0, round(tmp.cols*2.0/3))).clone());
+		//_stitch(matCut, dstImage, sType);
 		break;
 	default:
 		assert(false);
 	}
-
 }
 
 
@@ -380,4 +411,33 @@ bool StitchingUtil::_cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::p
 
 bool StitchingUtil::_cmp_p2f(const Point2f &a, const Point2f &b) {
 	return a.x == b.x ? a.y < b.y : a.x < b.x;
+}
+
+Mat StitchingUtil::getMask(const Mat &srcImage, bool isLeft) {
+	Mat mask = Mat::zeros(srcImage.size(), CV_8U);
+	Mat roi(mask, getMaskROI(srcImage,isLeft)[0]);
+	roi = Scalar(255,255,255);
+	return mask;
+}
+std::vector<Rect> StitchingUtil::getMaskROI(const Mat &srcImage, bool isLeft) {
+	const double widthParam = 0.20, heightParam = 0.6;
+	std::vector<Rect> ret;
+	ret.push_back(isLeft
+		? Rect(round(srcImage.cols*(1-widthParam)),0,round(srcImage.cols*widthParam),srcImage.rows*heightParam)
+		: Rect(0,0,round(srcImage.cols*widthParam),srcImage.rows*heightParam));
+	return ret;
+}
+
+void StitchingUtil::showMatchingPair(
+	const Mat &left,
+	const std::vector<KeyPoint> &kptL,
+	const Mat &right,
+	const std::vector<KeyPoint> &kptR,
+	const std::vector<DMatch> &goodMatches) {
+		Mat img_matches;
+		drawMatches(left,kptL, right, kptR, goodMatches, img_matches);
+		Mat forshow;
+		resize(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
+		imshow("MatchSift", forshow);
+		waitKey();
 }

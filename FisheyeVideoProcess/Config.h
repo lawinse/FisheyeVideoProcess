@@ -10,6 +10,7 @@
 #define PI 3.14159265358979323846
 #define RESOURCE_PATH ".\\Resources\\"
 #define OUTPUT_PATH ".\\Outputs\\"
+#define TEMP_PATH ".\\Temp\\"
 
 
 #define OPENCV_3
@@ -17,6 +18,7 @@
 	#define OPENCV_2
 #else
 	//may define sth
+	#define OPENCV3_CONTRIB
 #endif
 
 using namespace cv;

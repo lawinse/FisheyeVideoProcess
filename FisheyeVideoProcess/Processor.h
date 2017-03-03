@@ -13,6 +13,7 @@ private:
 	int radiusOfCircle;
 	Point2i centerOfCircleBeforeResz;
 	Point2i centerOfCircleAfterResz;
+	int fps;
 
 	// Utils
 	CorrectingUtil correctingUtil;
@@ -27,7 +28,7 @@ public:
 	Processor();
 	~Processor();
 	void setPaths(std::string inputPaths[], int inputCnt, std::string outputPath);
-	void process();
+	void process(int maxSecCnt = INT_MAX);
 	
 
 

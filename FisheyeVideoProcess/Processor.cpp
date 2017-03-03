@@ -27,7 +27,13 @@ void Processor::setPaths(std::string inputPaths[], int inputCnt, std::string out
 	
 	vWriter = VideoWriter(
 		outputPath, CV_FOURCC('D', 'I', 'V', 'X'),
-		vCapture[0].get(CV_CAP_PROP_FPS), Size(radiusOfCircle*4,radiusOfCircle));
+		fps = vCapture[0].get(CV_CAP_PROP_FPS), Size(radiusOfCircle*4,radiusOfCircle));
+
+	std::cout << "[BASIC INFO]" << std::endl;
+	std::cout << "INPUT: (FPS=" << fps << ")" <<  std::endl;
+	for (int i=0; i<inputCnt; ++i) std::cout << "\t" << inputPaths[i] << std::endl;
+	std::cout << "OUTPUT: " << std::endl; 
+	std::cout << "\t" << outputPath << std::endl;
 }
 
 void Processor::fisheyeShirnk(Mat &frm) {
@@ -102,19 +108,20 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 }
 
 void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
-	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::DIRECT, StitchingType::OPENCV_DEFAULT);
+	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::SELF_SIFT);
 }
 
-void Processor::process() {
-	Mat srcFrms[camCnt];
-	Mat dstFrms[camCnt];
-
+void Processor::process(int maxSecondsCnt) {
+	std::vector<Mat> srcFrms(camCnt);
+	std::vector<Mat> dstFrms(camCnt);
+	int ttlFrmsCnt = fps*maxSecondsCnt;
 	int fIndex = 0;
-	while(1) {
+	while(++fIndex < ttlFrmsCnt) {
 		// frame by frame
-		++fIndex;
-		std::cout << ">>>>> Processing No." << fIndex << " frame..." <<std::endl;
-		Mat tmpFrms[camCnt];
+		std::cout << ">>>>> Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ..." <<std::endl;
+		std::vector<Mat> tmpFrms(camCnt);
+		Mat dstImage;
+
 		for (int i=0; i<camCnt; ++i) {
 			vCapture[i] >> tmpFrms[i];
 			if (tmpFrms[i].empty()) break;
@@ -136,13 +143,17 @@ void Processor::process() {
 			centerOfCircleAfterResz.x = srcFrms[0].cols/2;
 			centerOfCircleAfterResz.y = srcFrms[0].rows/2;
 		}
-
+		std::cout << "\tCorrecting ..." <<std::endl;
 		for (int i=0; i<camCnt; ++i) {
-			// fisheyeShirnk(srcFrms[i]); // No need, confirmed.
 			fisheyeCorrect(srcFrms[i], dstFrms[i]);
 		}
-		
+		std::cout << "\tStitching ..." <<std::endl;
+		panoStitch(dstFrms, dstImage);
+		Mat forshow;
+		resize(dstImage, forshow, Size(dstImage.cols/3, dstImage.rows/3));
+		imshow("windows11",forshow);
+		waitKey();
 
+		vWriter << dstImage;
 	}
-
 }

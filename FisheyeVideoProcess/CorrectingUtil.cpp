@@ -133,6 +133,11 @@ void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cP
 	assert(srcImage.cols == srcImage.rows);		// Ensure to be a square
 	assert(srcImage.size() == dstImage.size());
 
+	bool needPersistReMap = false;
+	if (cParams.use_reMap && !pixelReMapping.isMapped()) {
+		if (!pixelReMapping.load(cParams.hashcode()))
+			needPersistReMap = true;
+	}
 
 	if (cParams.use_reMap && pixelReMapping.isMapped() && cParams == _cParams) {
 		if (pixelReMapping.reMap(srcImage, dstImage)) return;
@@ -159,6 +164,7 @@ void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cP
 		assert(false);
 	}
 	_cParams = cParams;
+	if (needPersistReMap) pixelReMapping.persist(cParams.hashcode());
 }
 
 // LONG_LON_MAPPING
@@ -344,7 +350,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 	double dx = camFieldAngle / srcImage.cols; 
 	double dy = dx;
 	double f = radius/(camFieldAngle/2);	// equal-distance projection 
-	const double focusLen = 600; //TOSOLVE: the value remains to be tuned
+	const double focusLen = 100; //TOSOLVE: the value remains to be tuned
 
 	double lat, lon;
 	double x,y,z,r;

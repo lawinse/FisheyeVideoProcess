@@ -7,6 +7,8 @@
 #endif
 
 enum StitchingType {
+	// OPENCV built-in somehow just can't work even in simplest case.
+	// Deprecated
 	OPENCV_DEFAULT,
 	OPENCV_TUNED,
 
@@ -19,12 +21,18 @@ enum StitchingType {
 enum StitchingPolicy {
 	// Copy from the very first version
 	DIRECT,
+	
+	STITCH_ONE_SIDE,
 	// Experimental
 	STITCH_DOUBLE_SIDE,
 };
 
 class StitchingUtil {
 private:
+	#define kFlannMaxDistScale 3
+	#define kFlannMaxDistThreshold 0.04
+	#define kFlannNumTrees 4 // by default
+
 	void opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType);
 	void facebookKeyPointMatching(Mat &left, Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair);
 	// TODO: Facebook Stitching method
@@ -40,6 +48,11 @@ private:
 #ifdef OPENCV_3
 	void matchWithAKAZE(const Mat&, const Mat&, std::vector<std::pair<Point2f, Point2f>>& );
 #endif
+	Mat getMask(const Mat &srcImage, bool isLeft);
+	std::vector<cv::Rect> getMaskROI(const Mat &srcImage, bool isLeft);
+	void showMatchingPair(
+		const Mat &left, const std::vector<KeyPoint> &kptL,
+		const Mat &right, const std::vector<KeyPoint> &kptR, const std::vector<DMatch> &goodMatches);
 
 	cv::Stitcher opencvStitcherBuild(StitchingType sType);
 
@@ -54,6 +67,6 @@ public:
 	StitchingUtil(){};
 	~StitchingUtil(){};
 	
-	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_DOUBLE_SIDE, StitchingType sType = OPENCV_DEFAULT);
+	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_ONE_SIDE, StitchingType sType = OPENCV_DEFAULT);
 };
 

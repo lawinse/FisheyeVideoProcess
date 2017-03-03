@@ -2,6 +2,10 @@
 
 #include "Config.h"
 #include <hash_map>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unordered_map>
+
 enum CorrectingType {
 	/* Copy from the very first version */
 	BASIC_FORWARD,
@@ -42,6 +46,14 @@ struct CorrectingParams {
 			&& use_reMap == obj.use_reMap;
 	}
 
+	int hashcode() {
+		int ret = ctype;
+		ret += 0x9e3779b9+(centerOfCircle.x<<6)+(centerOfCircle.x>>2);
+		ret += 0x9e3779b9+(centerOfCircle.y<<6)+(centerOfCircle.y>>2);
+		ret += 0x9e3779b9+(radiusOfCircle<<6)+(radiusOfCircle>>2);
+		ret += 0x9e3779b9+(dmType<<6)+(dmType>>2);
+		return ret;
+	}
 
 	CorrectingParams(
 		CorrectingType		_ctype = BASIC_REVERSED,
@@ -60,31 +72,92 @@ struct CorrectingParams {
 struct ReMapping{
 	// For memorization   map[dst] = src;
 	bool bMapped;
-	stdext::hash_map<long long, std::pair<int,int>> map;
+	struct pairhash {//double hash function for pair key
+	public:
+		template <typename T, typename U>
+		size_t operator()(const std::pair<T, U> &rhs) const {
+			size_t l = std::hash<T>()(rhs.first);
+			size_t r = std::hash<U>()(rhs.second);
+			return l + 0x9e3779b9 + (r << 6) + (r >> 2);
+		}
+	};
+
+
+	std::unordered_map<std::pair<int,int>, std::pair<int,int>, pairhash> map;
 
 	ReMapping(){clear();}
 	void clear() {map.clear(); bMapped = false;}
 	bool isMapped() {return bMapped && !(map.size() == 0);}
 	std::pair<int,int> get(std::pair<int,int> dstPos) {
-		return map[dstPos.first*(long long)INT_MAX + dstPos.second];
+		return map[dstPos];
 	}
 	void set(std::pair<int,int>srcPos, std::pair<int,int>dstPos) {
 		bMapped = true;
-		map[dstPos.first*(long long)INT_MAX + dstPos.second] = srcPos;
+		map[dstPos] = srcPos;
 	}
 
 	bool reMap(Mat &srcImage, Mat &dstImage) {
 		if (!isMapped()) return false;
-		for (stdext::hash_map<long long, std::pair<int,int>>::iterator it=map.begin(); it!=map.end(); ++it) {
+		for (auto it=map.begin(); it!=map.end(); ++it) {
 			int i,j,i_dst,j_dst;
-			i_dst = (it->first)/INT_MAX, j_dst = (it->first)%INT_MAX;
+			i_dst = (it->first).first, j_dst = (it->first).second;
 			i = (it->second).first, j = (it->second).second;
-			dstImage.at<Vec3b>(i_dst,j_dst)[0] = srcImage.at<Vec3b>(i,j)[0];
-			dstImage.at<Vec3b>(i_dst,j_dst)[1] = srcImage.at<Vec3b>(i,j)[1];
-			dstImage.at<Vec3b>(i_dst,j_dst)[2] = srcImage.at<Vec3b>(i,j)[2];
+			dstImage.at<Vec3b>(i_dst,j_dst) = srcImage.at<Vec3b>(i,j);
 		}
+		std::cout << "[Message] ReMapping used." << std::endl;
 		return true;
 	}
+
+	inline std::string getPersistFilename(int cpHash) {
+		std::string fname = TEMP_PATH +(std::string)"REMAP";
+		char hash[20];
+		sprintf(hash, "%x", cpHash);
+		fname += (std::string) hash + ".dat";
+		return fname;
+	}
+
+	bool load(int cpHash) {
+		if (isMapped()) return true;
+		try {
+			FILE *fpSrc = NULL;
+			int a,b,c,d;
+			if ((fpSrc = fopen(getPersistFilename(cpHash).c_str(), "r")) == NULL) {
+				std::cout << "[Warning] Load ReMapping cannot be found." << std::endl;
+				return false;
+			}
+			map.clear();
+			while (fscanf(fpSrc, "%d%d%d%d", &a, &b, &c, &d)!=EOF) {
+				map[std::make_pair(a,b)] = std::make_pair(c,d);
+			}
+			bMapped = true;
+			std::cout << "[Message] Successfully Load ReMapping data." << std::endl;
+			fclose(fpSrc);
+			return true;
+		} catch(...) {
+			std::cout << "[Error] Load ReMapping data UNKNOWN error." << std::endl;
+			return false;
+		}
+	}
+
+	void persist(int cpHash) {
+		assert(isMapped());
+		try {
+			FILE *fpDst;
+			if ((fpDst = fopen(getPersistFilename(cpHash).c_str(), "w+")) == NULL) {
+				std::cout << "[Warning] Persist ReMapping cannot be found." << std::endl;
+				return;
+			}
+			for (auto it=map.begin(); it!=map.end(); ++it) {
+				fprintf(fpDst,"%d %d %d %d ", (it->first).first, (it->first).second, (it->second).first,(it->second).second);
+			}
+			fclose(fpDst);
+		} catch(...) {
+			std::cout << "[Error] Persist ReMapping data UNKNOWN error." << std::endl;
+			return;
+		}
+	}
+
+
 };
 
 class CorrectingUtil {
