@@ -12,6 +12,8 @@ enum StitchingType {
 	OPENCV_DEFAULT,
 	OPENCV_TUNED,
 
+	OPENCV_SELF_DEV,
+
 	FACEBOOK,  /* In fact only use its keypoint mathc alogorithm, reference: surrond360 */
 
 	SELF_SURF,
@@ -34,6 +36,7 @@ private:
 	#define kFlannNumTrees 4 // by default
 
 	void opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType);
+	void opencvSelfStitching(std::vector<Mat> &srcs, Mat &dstImage);
 	void facebookKeyPointMatching(Mat &left, Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair);
 	// TODO: Facebook Stitching method
 	void facebookStitching();

@@ -28,5 +28,3 @@ const double ERR = 1e-7;
 
 inline double round(const double a) {return cvRound(a);}
 inline double square(const double a) {return pow(a,2);}
-
-

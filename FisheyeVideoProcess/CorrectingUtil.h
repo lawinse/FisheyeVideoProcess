@@ -18,6 +18,9 @@ enum CorrectingType {
 	PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_FORWARD,
 	PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
 
+	LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD,
+	LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED,
+
 	OPENCV,
 };
 
@@ -32,6 +35,7 @@ struct CorrectingParams {
 	Point2i centerOfCircle;
 	int radiusOfCircle;
 	DistanceMappingType dmType;
+	Point2d w;
 	bool use_reMap;
 	/*
 		const double theta_left = 0;
@@ -43,7 +47,9 @@ struct CorrectingParams {
 		return ctype == obj.ctype && centerOfCircle == obj.centerOfCircle
 			&& radiusOfCircle == obj.radiusOfCircle
 			&& dmType == obj.dmType
-			&& use_reMap == obj.use_reMap;
+			&& use_reMap == obj.use_reMap
+			&& ((ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD || ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED)
+				&& w == obj.w);
 	}
 
 	int hashcode() {
@@ -52,6 +58,11 @@ struct CorrectingParams {
 		ret += 0x9e3779b9+(centerOfCircle.y<<6)+(centerOfCircle.y>>2);
 		ret += 0x9e3779b9+(radiusOfCircle<<6)+(radiusOfCircle>>2);
 		ret += 0x9e3779b9+(dmType<<6)+(dmType>>2);
+		if (ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD ) {
+			ret += ret += 0x9e3779b9+((int)round(w.x*10000)<<6)+((int)round(w.x*10000)>>2);
+			ret += 0x9e3779b9+((int)round(w.y*10000)<<6)+((int)round(w.y*10000)>>2);
+		}
+
 		return ret;
 	}
 
@@ -168,10 +179,10 @@ private:
 	CorrectingParams _cParams;
 	void basicCorrecting(Mat &src, Mat &dst, CorrectingType ctype);
 	void LLMCorrecting(Mat &src, Mat &dst, Point2i center, int radius, CorrectingType ctype);
-	void PLLMCLMCorrentingForward(Mat &src, Mat &dst, Point2i center, int radius);
+	void PLLMCLMCorrentingForward(Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype);
 	void PLLMCLMCorrentingReversed(
 		Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype);	// w = PI/2
-	
+	void LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype);	// w unfixed
 	// helper function
 	double getPhiFromV(double v);
 	void rotateEarth(double &x, double &y, double &z);

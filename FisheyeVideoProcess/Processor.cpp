@@ -108,7 +108,7 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 }
 
 void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
-	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::SELF_SIFT);
+	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::FACEBOOK);
 }
 
 void Processor::process(int maxSecondsCnt) {

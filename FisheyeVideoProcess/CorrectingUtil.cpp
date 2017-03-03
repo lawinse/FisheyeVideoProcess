@@ -154,11 +154,15 @@ void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cP
 		break;
 	case PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_FORWARD:
 		PLLMCLMCorrentingForward(
-			srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle);
+			srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle, cParams.dmType);
 		break;
 	case PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED:
 		PLLMCLMCorrentingReversed(
 			srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle, cParams.dmType);
+		break;
+	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD:
+	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED:
+		LLMCLMUFCorrecting(srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle, cParams.dmType);
 		break;
 	default:
 		assert(false);
@@ -272,11 +276,11 @@ void CorrectingUtil::LLMCorrecting(
 }
 
 // Pespective LLM Forward
-void CorrectingUtil::PLLMCLMCorrentingForward(Mat &srcImage, Mat &dstImage, Point2i center, int radius) {
+void CorrectingUtil::PLLMCLMCorrentingForward(Mat &srcImage, Mat &dstImage, Point2i center, int radius, DistanceMappingType dmType) {
 	double dx = camFieldAngle / srcImage.cols; 
 	double dy = dx;
 	double f = radius/(camFieldAngle/2);	// equal-distance projection 
-	const double focusLen = 100; //TOSOLVE: the value remains to be tuned
+	const double focusLen = 600; //TOSOLVE: the value remains to be tuned
 
 	double lat, lon;
 	double x,y,z,r;
@@ -286,17 +290,36 @@ void CorrectingUtil::PLLMCLMCorrentingForward(Mat &srcImage, Mat &dstImage, Poin
 	
 	int u_src, v_src, u_dst, v_dst;
 	double lon_offset = (PI - camFieldAngle) / 2, lat_offset = (PI - camFieldAngle) / 2;
+	double mo;
 
 	for (int j=0; j<srcImage.rows; ++j)
 		for (int i=0; i<srcImage.cols; ++i) {
+			switch (dmType) {
+			case LONG_LAT:
+				lat = lat_offset+j*dy;
 
-			x = i-center.x;
-			y = center.y-j;
-			z = focusLen;
-			double mo = sqrt(square(x) + square(y) + square(z));
-			x /= mo;
-			y /= mo;
-			z /= mo;
+				lon = lon_offset+i*dx;
+
+				x = -sin(lat)*cos(lon);
+				y = cos(lat);
+				z = sin(lat)*sin(lon);
+				break;
+
+			case PERSPECTIVE:
+				x = i-center.x;
+				y = center.y-j;
+				z = focusLen;
+				mo = sqrt(square(x) + square(y) + square(z));
+				x /= mo;
+				y /= mo;
+				z /= mo;
+
+
+				break;
+			default:
+				assert(false);
+			}
+
 
 			theta_sphere = acos(z);
 			phi_sphere = cvFastArctan(y,x)*PI/180;
@@ -413,3 +436,6 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 		}
 }
 
+void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype) {
+	//TODO
+}

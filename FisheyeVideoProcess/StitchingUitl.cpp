@@ -328,6 +328,9 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 	case OPENCV_TUNED:
 		opencvStitching(srcs, dstImage, sType);
 		break;
+	case OPENCV_SELF_DEV:
+		opencvSelfStitching(srcs, dstImage);
+		break;
 	case FACEBOOK:
 	case SELF_SURF:
 	case SELF_SIFT:
