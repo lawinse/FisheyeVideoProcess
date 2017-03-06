@@ -28,7 +28,7 @@ public:
 	Processor();
 	~Processor();
 	void setPaths(std::string inputPaths[], int inputCnt, std::string outputPath);
-	void process(int maxSecCnt = INT_MAX);
+	void process(int maxSecCnt = INT_MAX, int startSecond = 0);
 	
 
 

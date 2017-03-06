@@ -99,24 +99,34 @@ void Processor::fisheyeShirnk(Mat &frm) {
 
 void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	//TODO: To apply different type of correction
-	correctingUtil.doCorrect(src, dst, 
-		CorrectingParams(
-			PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
-			centerOfCircleAfterResz,
-			radiusOfCircle,
-			LONG_LAT));
+	CorrectingParams cp = CorrectingParams(
+		LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED,
+		centerOfCircleAfterResz,
+		radiusOfCircle,
+		LONG_LAT);
+	//cp.use_reMap = false;
+	cp.w = Point2d(95*PI/180, 95*PI/180);
+	correctingUtil.doCorrect(src, dst, cp);
 }
 
 void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
-	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::FACEBOOK);
+	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::SELF_SIFT);
 }
 
-void Processor::process(int maxSecondsCnt) {
+void Processor::process(int maxSecondsCnt, int startSecond) {
 	std::vector<Mat> srcFrms(camCnt);
 	std::vector<Mat> dstFrms(camCnt);
-	int ttlFrmsCnt = fps*maxSecondsCnt;
+	int ttlFrmsCnt = fps*(maxSecondsCnt+startSecond);
 	int fIndex = 0;
-	while(++fIndex < ttlFrmsCnt) {
+	while (fIndex < startSecond*fps) {
+		Mat tmp;
+		for (int i=0; i<camCnt; ++i) {
+			vCapture[i] >> tmp;
+		}
+		fIndex++;
+	}
+
+	while (++fIndex < ttlFrmsCnt) {
 		// frame by frame
 		std::cout << ">>>>> Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ..." <<std::endl;
 		std::vector<Mat> tmpFrms(camCnt);
@@ -139,9 +149,11 @@ void Processor::process(int maxSecondsCnt) {
 		}
 
 		// Hardcode: Use 1st to set centerOfCircleAfterResz
-		if (fIndex == 1) {
+		static bool isSetCenter = false;
+		if (!isSetCenter) {
 			centerOfCircleAfterResz.x = srcFrms[0].cols/2;
 			centerOfCircleAfterResz.y = srcFrms[0].rows/2;
+			isSetCenter = true;
 		}
 		std::cout << "\tCorrecting ..." <<std::endl;
 		for (int i=0; i<camCnt; ++i) {

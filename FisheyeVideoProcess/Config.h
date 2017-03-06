@@ -24,7 +24,7 @@
 using namespace cv;
 
 const double M_PI = PI;
-const double ERR = 1e-7;
+const double ERR = 1e-5;
 
 inline double round(const double a) {return cvRound(a);}
 inline double square(const double a) {return pow(a,2);}

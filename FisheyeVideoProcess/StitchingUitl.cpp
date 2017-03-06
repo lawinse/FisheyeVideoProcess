@@ -175,7 +175,7 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 		matchesR.push_back(matchPointPairsLRAll[i].second);
 	}
 
-	static const int kRansacReprojThreshold = 100;
+	static const int kRansacReprojThreshold = 80;
 	findHomography(
 		matchesR,
 		matchesL,
@@ -261,10 +261,11 @@ void StitchingUtil::selfStitchingSAfterMatching(
 	const double ransacReprojThreshold = 5;
 	OutputArray mask=noArray();
 	const int maxIters = 2000;
-	const double confidence = 0.90;
+	const double confidence = 0.95;
 
 	Mat H = cv::findHomography(matchedR, matchedL, CV_RANSAC, ransacReprojThreshold, mask, maxIters, confidence);
-	warpPerspective(rightOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows), INTER_CUBIC);
+	std::cout <<"[Message] Homography = \n" << H <<std::endl;
+	warpPerspective(rightOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows), INTER_LINEAR);
 	Mat half(dstImage, Rect(0,0,leftOri.cols,leftOri.rows));
 	leftOri.copyTo(half);
 

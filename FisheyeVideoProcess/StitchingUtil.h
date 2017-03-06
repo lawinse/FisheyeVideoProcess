@@ -44,7 +44,7 @@ private:
 	void selfStitchingSAfterMatching(
 		Mat &left, Mat &right, Mat &leftOri, Mat &rightOri, std::vector<std::pair<Point2f, Point2f>> &matchedPair, Mat &dstImage);
 
-	// helper functiom
+	// helper function
 	/* facebook matching, need opencv3.0+ supported actually */
 	void matchWithBRISK(const Mat&, const Mat&, std::vector<std::pair<Point2f, Point2f>>& );
 	void matchWithORB(const Mat&, const Mat&, std::vector<std::pair<Point2f, Point2f>>& );

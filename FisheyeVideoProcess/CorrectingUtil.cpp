@@ -131,12 +131,14 @@ void CorrectingUtil::basicCorrecting(Mat &srcImage, Mat &dstImage, CorrectingTyp
 
 void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cParams) {
 	assert(srcImage.cols == srcImage.rows);		// Ensure to be a square
-	assert(srcImage.size() == dstImage.size());
+	//assert(srcImage.size() == dstImage.size());
 
 	bool needPersistReMap = false;
 	if (cParams.use_reMap && !pixelReMapping.isMapped()) {
 		if (!pixelReMapping.load(cParams.hashcode()))
 			needPersistReMap = true;
+		else
+			_cParams = cParams;
 	}
 
 	if (cParams.use_reMap && pixelReMapping.isMapped() && cParams == _cParams) {
@@ -162,7 +164,7 @@ void CorrectingUtil::doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cP
 		break;
 	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD:
 	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED:
-		LLMCLMUFCorrecting(srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle, cParams.dmType);
+		LLMCLMUFCorrecting(srcImage, dstImage, cParams.centerOfCircle, cParams.radiusOfCircle, cParams.ctype, cParams.w);
 		break;
 	default:
 		assert(false);
@@ -234,9 +236,9 @@ void CorrectingUtil::LLMCorrecting(
 			}
 		break;
 	case LONG_LAT_MAPPING_REVERSED:
-		for (int j=0; j<srcImage.rows; ++j) {
+		for (int j=0; j<dstImage.rows; ++j) {
 			lat = lat_offset + j*dy;
-			for (int i=0; i<srcImage.cols; ++i) {
+			for (int i=0; i<dstImage.cols; ++i) {
 				lon = lon_offset + i*dx;
 
 				/* Corrd Tranform */
@@ -280,7 +282,6 @@ void CorrectingUtil::PLLMCLMCorrentingForward(Mat &srcImage, Mat &dstImage, Poin
 	double dx = camFieldAngle / srcImage.cols; 
 	double dy = dx;
 	double f = radius/(camFieldAngle/2);	// equal-distance projection 
-	const double focusLen = 600; //TOSOLVE: the value remains to be tuned
 
 	double lat, lon;
 	double x,y,z,r;
@@ -372,8 +373,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 	Mat &srcImage, Mat &dstImage, Point2i center, int radius, DistanceMappingType dmtype) {
 	double dx = camFieldAngle / srcImage.cols; 
 	double dy = dx;
-	double f = radius/(camFieldAngle/2);	// equal-distance projection 
-	const double focusLen = 100; //TOSOLVE: the value remains to be tuned
+	double f = radius/(camFieldAngle/2);	// equal-distance projection  
 
 	double lat, lon;
 	double x,y,z,r;
@@ -386,8 +386,8 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 	double mo;
 
 
-	for (int j=0; j<srcImage.rows; ++j)
-		for (int i=0; i<srcImage.cols; ++i) {
+	for (int j=0; j<dstImage.rows; ++j)
+		for (int i=0; i<dstImage.cols; ++i) {
 			//std::cout << i << " " << j << std::endl;
 			switch (dmtype) {
 			case LONG_LAT:
@@ -436,6 +436,124 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 		}
 }
 
-void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype) {
-	//TODO
+void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int radius, CorrectingType ctype,  Point2d w) {
+	double w_lon = w.x, w_lat = w.y;
+	double dx = camFieldAngle / src.cols; 
+	double dy = dx;
+	double f = radius/(camFieldAngle/2);
+
+	double lat, lon;
+	double p_pol, theta_pol;
+	double theta_sphere, phi_sphere;
+
+	double x,y,z,r;
+
+	double x_cart, y_cart;
+	double u_src,v_src,u_dst,v_dst;
+	double lon_offset = (PI - camFieldAngle) / 2, lat_offset = (PI - camFieldAngle) / 2;
+	double lat_max = 2*getLFromPhi_ufixed(0,w_lat), lon_max = 2*getLFromPhi_ufixed(0,w_lat);
+
+	int left, top;
+
+	switch (ctype) {
+	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED:
+		for (int j=0; j<dst.rows; ++j)
+			for (int i=0; i<dst.cols; ++i) {
+				lat = getPhiFromV_ufixed(j*lat_max / dst.rows, w_lat);
+				lon = getPhiFromV_ufixed(i*lon_max / dst.cols, w_lon);
+				//lat = lat_offset+j*dy;
+				//lon = lon_offset+i*dx;
+
+				x = -sin(lat)*cos(lon);
+				y = cos(lat);
+				z = sin(lat)*sin(lon);
+
+				theta_sphere = acos(z);
+				phi_sphere = cvFastArctan(y,x)*PI/180;
+
+				p_pol = f*theta_sphere;
+				theta_pol = phi_sphere;
+
+				x_cart = p_pol*cos(theta_pol);
+				y_cart = p_pol*sin(theta_pol);
+
+				u_src = x_cart + center.x;
+				v_src = -y_cart + center.y;
+
+				if (u_src < 0 || u_src >= src.rows || v_src < 0 || v_src >= src.cols)
+						continue;
+				dst.at<Vec3b>(j,i) = src.at<Vec3b>(v_src,u_src);
+				pixelReMapping.set(std::make_pair(v_src,u_src), std::make_pair(j,i));
+			}
+		break;
+	case LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD:
+		left = center.x - radius;
+		top = center.y - radius;
+
+		for (int j = top; j < top+2*radius; ++j)
+			for (int i = left; i < left+2*radius; ++i) {
+				if (square(i-center.x) + square(j-center.y) > square(radius))
+					continue;
+				u_src = i, v_src = j;
+				x_cart = (u_src-center.x);
+				y_cart = -(v_src-center.y);
+
+				theta_pol = cvFastArctan(y_cart, x_cart)*PI/180;
+				p_pol = sqrt(square(x_cart) + square(y_cart));
+
+				theta_sphere = p_pol*(camFieldAngle/2)/radius;
+				phi_sphere = theta_pol;
+
+				x = sin(theta_sphere)*cos(phi_sphere);
+				y = sin(theta_sphere)*sin(phi_sphere);
+				z = cos(theta_sphere);
+
+				lat = acos(y);
+				lon = cvFastArctan(z,-x)*PI/180;
+
+				v_dst = src.rows*(lat_max/2-getLFromPhi_ufixed(lat, w_lat)) / lat_max;
+				u_dst = src.cols*(lon_max/2-getLFromPhi_ufixed(lon, w_lon)) / lon_max;
+				/*u_dst = (lon-lon_offset)/dx;
+				v_dst = (lat-lat_offset)/dy;*/
+
+				if (u_dst < 0 || u_dst >= dst.rows || v_dst < 0 || v_dst >= dst.cols)
+						continue;
+				dst.at<Vec3b>(v_dst,u_dst) = src.at<Vec3b>(j,i);
+				pixelReMapping.set(std::make_pair(j,i), std::make_pair(v_dst,u_dst));
+			}
+		break;
+	default:
+		assert(false);
+	}
 }
+
+double CorrectingUtil::getPhiFromV_ufixed(double v, double w) const {
+	static const int maxIter = 200;
+	int cnt = 0;
+	static double L_0 = getLFromPhi_ufixed(0,w);
+	double left, right, mid, tmp;
+	if (v >=0 && v < L_0) {
+		left = 0, right = PI/2.0, mid = left;
+	} else {
+		left = PI/2.0, right = PI, mid = right;
+	}
+	tmp = _equation_ufixed(v, mid, w);
+	while (abs(tmp) > ERR && cnt++ < maxIter) {
+		mid = (left + right) / 2;
+		tmp = _equation_ufixed(v, mid, w);
+		if (tmp > 0) left = mid;
+		else right = mid;
+	}
+	return mid;
+}
+
+double CorrectingUtil::getLFromPhi_ufixed(double phi, double w) const {
+	double l = sin(w)*sqrt(square(cos(phi)) + square(1-sin(phi))) / sin(PI - w-atan((1-sin(phi)) / abs(cos(phi))));
+	return (phi > PI/2.0) ? -l:l;
+}
+
+double CorrectingUtil::_equation_ufixed(double l, double phi, double w) const {
+	static double L_0 = getLFromPhi_ufixed(0,w);
+	return getLFromPhi_ufixed(phi,w)-L_0+l;
+}
+
