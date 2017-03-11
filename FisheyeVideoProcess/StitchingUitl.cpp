@@ -1,12 +1,7 @@
 #include "StitchingUtil.h"
-#include <opencv2\features2d\features2d.hpp>
-#ifdef OPENCV_3
-	#include <opencv2\stitching\detail\matchers.hpp>
-	#include <opencv2\xfeatures2d\nonfree.hpp>
-#else
-	#include <opencv2\nonfree\features2d.hpp>
-	#include <opencv2\nonfree\nonfree.hpp>
-#endif
+#include "ImageUtil.h"
+#include <algorithm>
+
 
 using namespace cv::detail;
 using namespace cv;
@@ -253,7 +248,8 @@ void StitchingUtil::selfKeyPointMatching(Mat &left, Mat &right, std::vector<std:
 }
 
 void StitchingUtil::selfStitchingSAfterMatching(
-	Mat &left, Mat &right, Mat &leftOri, Mat &rightOri, std::vector<std::pair<Point2f, Point2f>> &matchedPair, Mat &dstImage) {
+	const Mat &left, const Mat &right, const Mat &leftOri, const Mat &rightOri,
+	std::vector<std::pair<Point2f, Point2f>> &matchedPair, Mat &dstImage) {
 	// input mat should be colored ones
 	std::vector<Point2f> matchedL, matchedR;
 	unzipMatchedPair(matchedPair, matchedL, matchedR);
@@ -290,7 +286,7 @@ Stitcher StitchingUtil::opencvStitcherBuild(StitchingType sType) {
 }
 
 
-void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
+void StitchingUtil::opencvStitching(const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
 	assert(sType <= OPENCV_TUNED);
 	static Stitcher s = opencvStitcherBuild(sType);
 	Stitcher::Status status;
@@ -320,7 +316,7 @@ void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, Stitc
 	}
 }
 
-void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
+void StitchingUtil::_stitch(const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, std::pair<double, double> &maskRatio) {
 	std::vector<Mat> srcsGrayScale;
 	std::vector<std::pair<Point2f, Point2f>> matchedPair;
 	Mat tmp, tmpGrayScale, tmp2;
@@ -330,7 +326,7 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 		opencvStitching(srcs, dstImage, sType);
 		break;
 	case OPENCV_SELF_DEV:
-		opencvSelfStitching(srcs, dstImage);
+		opencvSelfStitching(srcs, dstImage, maskRatio);
 		break;
 	case FACEBOOK:
 	case SELF_SURF:
@@ -385,13 +381,52 @@ void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPol
 		//	tmp(Range(0, tmp.rows), Range(0, round(tmp.cols*2.0/3))).clone());
 		//_stitch(matCut, dstImage, sType);
 		break;
+	case STITCH_DOUBLE_SIDE:
+		_stitchDoubleSide(srcs, dstImage, sType);
+		break;
 	default:
 		assert(false);
 	}
 }
 
+void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType) {
+	Mat dstBF, dstFB;
+	StitchingUtil::osParam.blend_strength = 4;
+	_stitch(srcs, dstBF, sType);
+	std::reverse(srcs.begin(), srcs.end());
+	_stitch(srcs, dstFB, sType);
+	std::reverse(srcs.begin(), srcs.end());
+	imshow("BF",dstBF);
+	imshow("FB",dstFB);
+	cvWaitKey();
 
-void StitchingUtil::getGrayScaleAndFiltered(std::vector<Mat> &src, std::vector<Mat> &dst) {
+	ImageUtil iu;
+	iu.USM(dstBF, dstBF);
+	iu.USM(dstFB, dstFB);
+
+	const double ratio = 1.0/(4*(1-OVERLAP_RATIO_DOUBLESIDE));
+	Mat dstTmp;
+	std::vector<Mat> tmpSrc;
+	tmpSrc.push_back(
+		dstFB(Range(0,dstFB.rows), Range(max(0.0,0.5-ratio)*dstFB.cols,min(1.0,0.5+ratio)*dstFB.cols)).clone());
+	tmpSrc.push_back(
+		dstBF(Range(0,dstBF.rows), Range(max(0.0,0.5-ratio)*dstBF.cols,min(1.0,0.5+ratio)*dstBF.cols)).clone());
+	// dstTmp: F-B-F
+	StitchingUtil::osParam.blend_strength = 0;
+	_stitch(tmpSrc,dstTmp,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE*0.9,0.8));	//0.9 --> tolerance
+	imshow("FBF",dstTmp);
+	iu.USM(dstTmp, dstTmp);
+	cvWaitKey();
+	tmpSrc.clear();
+	tmpSrc.push_back(
+		dstTmp(Range(0,dstTmp.rows), Range(dstTmp.cols*0.5,dstTmp.cols)).clone());
+	tmpSrc.push_back(
+		dstTmp(Range(0,dstTmp.rows), Range(0,dstTmp.cols*0.5)).clone());
+	_stitch(tmpSrc,dstImage,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE*0.9,0.8));	//0.9 --> tolerance
+
+}
+
+void StitchingUtil::getGrayScaleAndFiltered(const std::vector<Mat> &src, std::vector<Mat> &dst) {
 	for (int i=0; i<src.size(); ++i) {
 		Mat tmp1,tmp2;
 		cvtColor(src[i], tmp1, CV_RGB2GRAY);
@@ -418,14 +453,14 @@ bool StitchingUtil::_cmp_p2f(const Point2f &a, const Point2f &b) {
 	return a.x == b.x ? a.y < b.y : a.x < b.x;
 }
 
-Mat StitchingUtil::getMask(const Mat &srcImage, bool isLeft) {
+Mat StitchingUtil::getMask(const Mat &srcImage, bool isLeft, std::pair<double, double> &ratio) {
 	Mat mask = Mat::zeros(srcImage.size(), CV_8U);
-	Mat roi(mask, getMaskROI(srcImage,isLeft)[0]);
+	Mat roi(mask, getMaskROI(srcImage,isLeft,ratio)[0]);
 	roi = Scalar(255,255,255);
 	return mask;
 }
-std::vector<Rect> StitchingUtil::getMaskROI(const Mat &srcImage, bool isLeft) {
-	const double widthParam = 0.25, heightParam = 0.8;
+std::vector<Rect> StitchingUtil::getMaskROI(const Mat &srcImage, bool isLeft, std::pair<double, double> &ratio) {
+	double widthParam = ratio.first, heightParam = ratio.second;
 	std::vector<Rect> ret;
 	ret.push_back(isLeft
 		? Rect(round(srcImage.cols*(1-widthParam)),0,round(srcImage.cols*widthParam),srcImage.rows*heightParam)
@@ -453,4 +488,34 @@ std::vector<UMat> StitchingUtil::convertMatToUMat(std::vector<Mat> &input) {
 		ret[i] = input[i].clone().getUMat(ACCESS_RW);
 	}
 	return ret;
+}
+
+inline bool StitchingUtil::almostBlack(const Vec3b &v) {
+	const double tolerance = square(15);
+	return square(v[0]) + square(v[1]) + square(v[2]) <= tolerance;
+}
+
+
+void StitchingUtil::removeBlackPixelByBound(Mat &src, Mat &dst) {
+	// first find height boundary
+	int widthSideTolerance = src.cols*0.02;
+	int maxRows = src.rows, minRows = 0;
+	int maxCols = src.cols, minCols = 0;
+	for (int i=widthSideTolerance; i<src.cols-widthSideTolerance; ++i) {
+		for (;almostBlack(src.at<Vec3b>(maxRows, i)); --maxRows);
+		for (;almostBlack(src.at<Vec3b>(minRows, i)); ++minRows);
+	}
+	// then find width boundary
+	for (int j=minRows; j <= maxRows; ++j) {
+		for (;almostBlack(src.at<Vec3b>(j, maxCols)); --maxCols);
+		for (;almostBlack(src.at<Vec3b>(j, minCols)); ++minCols);
+	}
+
+	double restRatioPercent = (maxRows-minRows+1)*(maxCols-minCols+1)*100.0/(src.cols*src.rows);
+	LOG_MESS("Remove black pixel, remain:" << restRatioPercent << "%");
+	if (restRatioPercent < 70) {
+		imshow("src",src);
+		cvWaitKey();
+	}
+	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
 }

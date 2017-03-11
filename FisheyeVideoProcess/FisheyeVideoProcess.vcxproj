@@ -85,6 +85,7 @@
   <ItemGroup>
     <ClInclude Include="Config.h" />
     <ClInclude Include="CorrectingUtil.h" />
+    <ClInclude Include="ImageUtil.h" />
     <ClInclude Include="MyLog.h" />
     <ClInclude Include="Processor.h" />
     <ClInclude Include="StitchingUtil.h" />

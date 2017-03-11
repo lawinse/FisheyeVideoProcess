@@ -14,6 +14,7 @@ private:
 	Point2i centerOfCircleBeforeResz;
 	Point2i centerOfCircleAfterResz;
 	int fps;
+	Size dstPanoSize;
 
 	// Utils
 	CorrectingUtil correctingUtil;
@@ -24,6 +25,7 @@ private:
 	void fisheyeShirnk(Mat &frm);
 	void fisheyeCorrect(Mat &src, Mat &dst);
 	void panoStitch(std::vector<Mat> &srcs, Mat &dstImage);
+	void panoRefine(Mat &, Mat &dstImage);
 public:
 	Processor();
 	~Processor();

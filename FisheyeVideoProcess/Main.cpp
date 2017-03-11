@@ -8,7 +8,7 @@
 std::string runtimeHashCode;
 inline std::string getruntimeHashCode() {
 	char hash[20];
-	sprintf(hash, "%x", std::hash<int>()(clock()));
+	sprintf(hash, "%x",time(0));
 	return (std::string) hash;
 }
 
@@ -25,14 +25,14 @@ int main(int argc, char ** args) {
 	runtimeHashCode = getruntimeHashCode();
 #ifdef RUN_MAIN
 	std::string oriSrc[] = {
-		RESOURCE_PATH + (std::string)"back1.mp4",
-		RESOURCE_PATH + (std::string)"front1.mp4"
+		RESOURCE_PATH + (std::string)"back.mp4",
+		RESOURCE_PATH + (std::string)"front.mp4"
 	};
 	processor.setPaths(oriSrc,sizeof(oriSrc)/sizeof(std::string),OUTPUT_PATH + (std::string)"test.avi"); //TOSOLVE: ouput must be avi format??
-	processor.process(1,0);
+	processor.process(1,5);
 #elif defined(RUN_TEST)
 	TestCase tc;
-	tc.test2();
+	tc.test1();
 	system("pause");
 #endif
 }

@@ -1,5 +1,6 @@
 #include "Processor.h"
 #include "CorrectingUtil.h"
+#include "ImageUtil.h"
 
 Processor::Processor() {
 	correctingUtil = CorrectingUtil();
@@ -27,7 +28,7 @@ void Processor::setPaths(std::string inputPaths[], int inputCnt, std::string out
 	
 	vWriter = VideoWriter(
 		outputPath, CV_FOURCC('D', 'I', 'V', 'X'),
-		fps = vCapture[0].get(CV_CAP_PROP_FPS), Size(radiusOfCircle*4,radiusOfCircle));
+		fps = vCapture[0].get(CV_CAP_PROP_FPS), dstPanoSize=Size(radiusOfCircle*4,radiusOfCircle*2));
 
 	std::cout << "[BASIC INFO]" << std::endl;
 	std::cout << "INPUT: (FPS=" << fps << ")" <<  std::endl;
@@ -112,16 +113,25 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
 	stitchingUtil.doStitch(
 		srcs, dst, 
-		StitchingPolicy::STITCH_ONE_SIDE, 
+		StitchingPolicy::STITCH_DOUBLE_SIDE, 
 		StitchingType::OPENCV_SELF_DEV);
 }
 
-void Processor::process(int maxSecondsCnt, int startSecond) {
+void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
+	Mat tmp, tmp2;
+	tmp = srcImage.clone();
+	// USM
+	ImageUtil().USM(tmp,tmp2);
+	resize(tmp2, tmp2, dstPanoSize);
+	dstImage = tmp2.clone();
+}
+
+void Processor::process(int maxSecondsCnt, int startFrame) {
 	std::vector<Mat> srcFrms(camCnt);
 	std::vector<Mat> dstFrms(camCnt);
-	int ttlFrmsCnt = fps*(maxSecondsCnt+startSecond);
+	int ttlFrmsCnt = fps*(maxSecondsCnt)+startFrame;
 	int fIndex = 0;
-	while (fIndex < startSecond*fps) {
+	while (fIndex < startFrame) {
 		Mat tmp;
 		for (int i=0; i<camCnt; ++i) {
 			vCapture[i] >> tmp;
@@ -129,47 +139,57 @@ void Processor::process(int maxSecondsCnt, int startSecond) {
 		fIndex++;
 	}
 
-	while (++fIndex < ttlFrmsCnt) {
+	while (fIndex < ttlFrmsCnt) {
 		// frame by frame
 		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ...");
-		std::vector<Mat> tmpFrms(camCnt);
-		Mat dstImage;
+		try {
+			std::vector<Mat> tmpFrms(camCnt);
+			Mat dstImage;
 
-		for (int i=0; i<camCnt; ++i) {
-			vCapture[i] >> tmpFrms[i];
-			if (tmpFrms[i].empty()) break;
+			for (int i=0; i<camCnt; ++i) {
+				vCapture[i] >> tmpFrms[i];
+				if (tmpFrms[i].empty()) break;
 		
-			/* Resize to square frame */
-			srcFrms[i] = tmpFrms[i](
-				/* row */
-				Range(centerOfCircleBeforeResz.y-radiusOfCircle, centerOfCircleBeforeResz.y+radiusOfCircle),
-				/* col */
-				Range(centerOfCircleBeforeResz.x-radiusOfCircle, centerOfCircleBeforeResz.x+radiusOfCircle))
-				.clone();	// must use clone()
+				/* Resize to square frame */
+				srcFrms[i] = tmpFrms[i](
+					/* row */
+					Range(centerOfCircleBeforeResz.y-radiusOfCircle, centerOfCircleBeforeResz.y+radiusOfCircle),
+					/* col */
+					Range(centerOfCircleBeforeResz.x-radiusOfCircle, centerOfCircleBeforeResz.x+radiusOfCircle))
+					.clone();	// must use clone()
 			
 			
-			dstFrms[i].create(srcFrms[i].rows, srcFrms[i].cols, srcFrms[i].type());
+				dstFrms[i].create(srcFrms[i].rows, srcFrms[i].cols, srcFrms[i].type());
+			}
+
+			// Hardcode: Use 1st to set centerOfCircleAfterResz
+			static bool isSetCenter = false;
+			if (!isSetCenter) {
+				centerOfCircleAfterResz.x = srcFrms[0].cols/2;
+				centerOfCircleAfterResz.y = srcFrms[0].rows/2;
+				isSetCenter = true;
+			}
+			std::cout << "\tCorrecting ..." <<std::endl;
+			for (int i=0; i<camCnt; ++i) {
+				fisheyeCorrect(srcFrms[i], dstFrms[i]);
+				//resize(dstFrms[i], dstFrms[i], Size(1000,1000));
+			}
+			std::cout << "\tStitching ..." <<std::endl;
+			panoStitch(dstFrms, dstImage);
+			panoRefine(dstImage, dstImage);
+			Mat forshow;
+			resize(dstImage, forshow, Size(1400, 700));
+			imshow("windows11",forshow);
+			cvWaitKey();
+
+			vWriter << dstImage;
+		} catch (cv::Exception e) {
+			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: " <<e.what());
+		} catch (...) {
+			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: UNKNOWN");
 		}
 
-		// Hardcode: Use 1st to set centerOfCircleAfterResz
-		static bool isSetCenter = false;
-		if (!isSetCenter) {
-			centerOfCircleAfterResz.x = srcFrms[0].cols/2;
-			centerOfCircleAfterResz.y = srcFrms[0].rows/2;
-			isSetCenter = true;
-		}
-		std::cout << "\tCorrecting ..." <<std::endl;
-		for (int i=0; i<camCnt; ++i) {
-			fisheyeCorrect(srcFrms[i], dstFrms[i]);
-			//resize(dstFrms[i], dstFrms[i], Size(1000,1000));
-		}
-		std::cout << "\tStitching ..." <<std::endl;
-		panoStitch(dstFrms, dstImage);
-		Mat forshow;
-		resize(dstImage, forshow, Size(dstImage.cols/2, dstImage.rows/2));
-		imshow("windows11",forshow);
-		cvWaitKey();
+		++fIndex;
 
-		//vWriter << dstImage;
 	}
 }

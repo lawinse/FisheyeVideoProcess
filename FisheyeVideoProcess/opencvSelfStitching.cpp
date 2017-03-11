@@ -1,30 +1,21 @@
 #include "StitchingUtil.h"
-#ifdef OPENCV_3
-	#include <opencv2\stitching\detail\matchers.hpp>
-	#include <opencv2\xfeatures2d\nonfree.hpp>
-#else
-	#include <opencv2\nonfree\features2d.hpp>
-	#include <opencv2\nonfree\nonfree.hpp>
-#endif
 using namespace cv::detail;
-void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage) {
-	assert(srcs.size() == 2);
-	static const double workMegapix = 0.8;
+void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio) {
+	Size maxSize = srcs[0].size();
+	for (auto src:srcs) {
+		if (src.size().area() > maxSize.area()) maxSize = src.size();
+	}
+	opencvSelfStitching(srcs,dstImage, maxSize , maskRatio);
+}
 
-	static const double seamMegapix = 0.1;
-	static const double composeMegapix =0.8;
-	static const float conf_thresh = 0.8;
-	static const WaveCorrectKind wave_correct = detail::WAVE_CORRECT_HORIZ;
-	static const int expos_comp_type = ExposureCompensator::GAIN_BLOCKS;
-	static const float match_conf = 0.5f;
-	static const int blend_type = Blender::MULTI_BAND;
-	static const float blend_strength = 10;
-	static const const Size resizeSz = Size(1440,1440);
+void StitchingUtil::opencvSelfStitching(
+	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,std::pair<double, double> &maskRatio) {
+
 
 
 	int imgCnt = srcs.size();
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
-	LOG_MESS("Finding features...");
+	LOG_MESS("Finding features... with MaskRatio (" << maskRatio.first << "," << maskRatio.second <<")");
 
 	Ptr<FeaturesFinder> finder;
 	finder = new SurfFeaturesFinder();
@@ -37,16 +28,15 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 
 	for (int i = 0; i < imgCnt; ++i) {
 		full_img1 = srcs[i].clone();
-		assert(full_img1.size().width >= resizeSz.width && full_img1.size().height >= resizeSz.height);
+		//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
 		resize(full_img1,full_img, resizeSz);
 		full_img_sizes[i] = full_img.size();
-		work_scale = min(1.0, sqrt(workMegapix * 1e6 / full_img.size().area()));
+		work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
 
 		resize(full_img, img, Size(), work_scale, work_scale);
-		seam_scale = min(1.0, sqrt(seamMegapix * 1e6 / full_img.size().area()));
+		seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
 		seam_work_aspect = seam_scale / work_scale;
-		auto a = StitchingUtil::getMaskROI(img,i==0);
-		(*finder)(img, features[i],a);
+		(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i==0, maskRatio));
 		features[i].img_idx = i;
 		LOG_MESS("Features in image #" << i+1 << ": " << features[i].keypoints.size());
 		resize(full_img, img, Size(), seam_scale, seam_scale);
@@ -59,7 +49,7 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 
 	LOG_MESS("Pairwise matching ...");
 	std::vector<MatchesInfo> pairwise_matches;
-	BestOf2NearestMatcher matcher(false, match_conf);
+	BestOf2NearestMatcher matcher(false, osParam.match_conf);
 	matcher(features, pairwise_matches); 
 	matcher.collectGarbage();
 
@@ -77,7 +67,7 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 	Ptr<detail::BundleAdjusterBase> adjuster;
 	adjuster = new detail::BundleAdjusterRay();
 
-	adjuster->setConfThresh(conf_thresh);
+	adjuster->setConfThresh(osParam.conf_thresh);
 	Mat_<uchar> refine_mask = Mat::zeros(3, 3, CV_8U);
 	refine_mask(0,0) = 1;
 	refine_mask(0,1) = 1;
@@ -100,7 +90,7 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 	std::vector<Mat> rmats;
 	for (size_t i = 0; i < cameras.size(); ++i)
 		rmats.push_back(cameras[i].R);
-	waveCorrect(rmats, wave_correct);
+	waveCorrect(rmats, osParam.wave_correct);
 	for (size_t i = 0; i < cameras.size(); ++i)
 		cameras[i].R = rmats[i];
 
@@ -117,10 +107,11 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 	for (int i = 0; i < imgCnt; ++i) {
 		masks[i].create(images[i].size(), CV_8U);
 		masks[i].setTo(Scalar::all(255));
+		//masks[i] = getMask(images[i],i==0);
 	}
 
 	Ptr<WarperCreator> warper_creator;
-	warper_creator = new cv::SphericalWarper();
+	warper_creator = new cv::SphericalWarper();			//TOSOLVE: Not sure
 
 	Ptr<RotationWarper> warper = warper_creator->create(static_cast<float>(warped_image_scale * seam_work_aspect));
 
@@ -142,7 +133,7 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 		images_warped[i].convertTo(images_warped_f[i], CV_32F);
 
 
-	Ptr<ExposureCompensator> compensator = ExposureCompensator::createDefault(expos_comp_type);
+	Ptr<ExposureCompensator> compensator = ExposureCompensator::createDefault(osParam.expos_comp_type);
 	compensator->feed(corners, images_warped, masks_warped);
 
 	Ptr<SeamFinder> seam_finder;
@@ -169,7 +160,7 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 		
 		full_img1 = srcs[img_idx].clone();
 		resize(full_img1,full_img, resizeSz);
-		compose_scale = min(1.0, sqrt(composeMegapix * 1e6 / full_img.size().area()));
+		compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
 		compose_work_aspect = compose_scale / work_scale;
 		warped_image_scale *= static_cast<float>(compose_work_aspect);
 		warper = warper_creator->create(warped_image_scale);
@@ -182,8 +173,8 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 
 			Size sz = full_img_sizes[i];
 			if (std::abs(compose_scale - 1) > 1e-1) {
-				sz.width = cvRound(full_img_sizes[i].width * compose_scale);
-				sz.height = cvRound(full_img_sizes[i].height * compose_scale);
+				sz.width = round(full_img_sizes[i].width * compose_scale);
+				sz.height = round(full_img_sizes[i].height * compose_scale);
 			}
 
 			Mat K;
@@ -217,16 +208,16 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 		resize(dilated_mask, seam_mask, mask_warped.size());
 		mask_warped = seam_mask & mask_warped;
 		if (blender.empty()) {
-			blender = Blender::createDefault(blend_type, false);
+			blender = Blender::createDefault(osParam.blend_type, false);
 			Size dst_sz = resultRoi(corners, sizes).size();
-			float blend_width = sqrt(static_cast<float>(dst_sz.area())) * blend_strength / 100.f;
+			float blend_width = sqrt(static_cast<float>(dst_sz.area())) * osParam.blend_strength / 100.f;
 			if (blend_width < 1.f)
 				blender = Blender::createDefault(Blender::NO, false);
-			else if (blend_type == Blender::MULTI_BAND) {
+			else if (osParam.blend_type == Blender::MULTI_BAND) {
 				MultiBandBlender * mb = dynamic_cast<MultiBandBlender*>(static_cast<Blender*>(blender));
 				mb->setNumBands(static_cast<int>(ceil(log(blend_width)/log(2.0)) - 1.0));
 				LOG_MESS("Multi-band blender, number of bands: " << mb->numBands());
-			} else if (blend_type == Blender::FEATHER) {
+			} else if (osParam.blend_type == Blender::FEATHER) {
 				FeatherBlender *fb = dynamic_cast<FeatherBlender*>(static_cast<Blender*>(blender));
 				fb->setSharpness(1.0/blend_width);
 				LOG_MESS("Feather blender, sharpness " << fb->sharpness());
@@ -238,9 +229,10 @@ void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstIm
 		blender->feed(img_warped_s, mask_warped, corners[img_idx]);
 	}
 
-	Mat result, result_mask;
+	Mat result, result_mask, tmp;
 	blender->blend(result, result_mask);
-	result.convertTo(dstImage, CV_8U);
+	result.convertTo(tmp, CV_8U);
+	removeBlackPixelByBound(tmp, dstImage);
 	LOG_MESS("Size of Pano:" << dstImage.size());
 	return;
 }
