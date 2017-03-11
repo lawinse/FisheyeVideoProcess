@@ -264,7 +264,7 @@ void StitchingUtil::selfStitchingSAfterMatching(
 	const double confidence = 0.95;
 
 	Mat H = cv::findHomography(matchedR, matchedL, CV_RANSAC, ransacReprojThreshold, mask, maxIters, confidence);
-	std::cout <<"[Message] Homography = \n" << H <<std::endl;
+	LOG_MESS("Homography = \n" << H );
 	warpPerspective(rightOri, dstImage, H, Size(leftOri.cols+rightOri.cols, leftOri.rows), INTER_LINEAR);
 	Mat half(dstImage, Rect(0,0,leftOri.cols,leftOri.rows));
 	leftOri.copyTo(half);
@@ -299,19 +299,19 @@ void StitchingUtil::opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, Stitc
 		status = s.stitch(srcs, dstImage);
 		
 		if (Stitcher::OK != status) {
-			std::cout << "[Error] Cannot stitch the image, errCode = " << status << std::endl;
+			LOG_ERR("Cannot stitch the image, errCode = " << status);
 			assert(false);
 		}
 		break;
 	case OPENCV_TUNED:
 		status = s.estimateTransform(srcs);
 		if (Stitcher::OK != status) {
-			std::cout << "[Error] Cannot stitch the image, error in estimateTranform, errCode = " << status << std::endl;
+			LOG_ERR("Cannot stitch the image, error in estimateTranform, errCode = " << status);
 			assert(false);
 		}
 		status = s.composePanorama(dstImage);
 				if (Stitcher::OK != status) {
-			std::cout << "[Error] Cannot stitch the image, error in composePanorama, errCode = " << status << std::endl;
+			LOG_ERR("[Error] Cannot stitch the image, error in composePanorama, errCode = " << status);
 			assert(false);
 		}
 		break;
@@ -335,7 +335,7 @@ void StitchingUtil::_stitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingType
 	case FACEBOOK:
 	case SELF_SURF:
 	case SELF_SIFT:
-		getGrayScale(srcs, srcsGrayScale);
+		getGrayScaleAndFiltered(srcs, srcsGrayScale);	// Add filter
 		tmp = srcs[0].clone(), tmpGrayScale = srcsGrayScale[0].clone();
 		for (int i=1; i<srcs.size(); ++i) {
 			matchedPair.clear();
@@ -391,11 +391,12 @@ void StitchingUtil::doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPol
 }
 
 
-void StitchingUtil::getGrayScale(std::vector<Mat> &src, std::vector<Mat> &dst) {
+void StitchingUtil::getGrayScaleAndFiltered(std::vector<Mat> &src, std::vector<Mat> &dst) {
 	for (int i=0; i<src.size(); ++i) {
-		Mat tmp;
-		cvtColor(src[i], tmp, CV_RGB2GRAY);
-		dst.push_back(tmp);
+		Mat tmp1,tmp2;
+		cvtColor(src[i], tmp1, CV_RGB2GRAY);
+		bilateralFilter(tmp1, tmp2, 11,11*2,11/2);
+		dst.push_back(tmp2);
 	}
 	assert(src.size() == dst.size());
 }
@@ -424,7 +425,7 @@ Mat StitchingUtil::getMask(const Mat &srcImage, bool isLeft) {
 	return mask;
 }
 std::vector<Rect> StitchingUtil::getMaskROI(const Mat &srcImage, bool isLeft) {
-	const double widthParam = 0.20, heightParam = 0.6;
+	const double widthParam = 0.25, heightParam = 0.8;
 	std::vector<Rect> ret;
 	ret.push_back(isLeft
 		? Rect(round(srcImage.cols*(1-widthParam)),0,round(srcImage.cols*widthParam),srcImage.rows*heightParam)
@@ -444,4 +445,12 @@ void StitchingUtil::showMatchingPair(
 		resize(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
 		imshow("MatchSift", forshow);
 		waitKey();
+}
+
+std::vector<UMat> StitchingUtil::convertMatToUMat(std::vector<Mat> &input) {
+	std::vector<UMat> ret(input.size());
+	for (int i=0; i<input.size(); ++i) {
+		ret[i] = input[i].clone().getUMat(ACCESS_RW);
+	}
+	return ret;
 }

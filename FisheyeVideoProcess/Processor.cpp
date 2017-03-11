@@ -100,17 +100,20 @@ void Processor::fisheyeShirnk(Mat &frm) {
 void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	//TODO: To apply different type of correction
 	CorrectingParams cp = CorrectingParams(
-		LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED,
+		PERSPECTIVE_LONG_LAT_MAPPING_CAM_LENS_MOD_REVERSED,
 		centerOfCircleAfterResz,
 		radiusOfCircle,
 		LONG_LAT);
 	//cp.use_reMap = false;
-	cp.w = Point2d(95*PI/180, 95*PI/180);
+	//cp.w = Point2d(95*PI/180, 95*PI/180);
 	correctingUtil.doCorrect(src, dst, cp);
 }
 
 void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
-	stitchingUtil.doStitch(srcs, dst, StitchingPolicy::STITCH_ONE_SIDE, StitchingType::SELF_SIFT);
+	stitchingUtil.doStitch(
+		srcs, dst, 
+		StitchingPolicy::STITCH_ONE_SIDE, 
+		StitchingType::OPENCV_SELF_DEV);
 }
 
 void Processor::process(int maxSecondsCnt, int startSecond) {
@@ -128,7 +131,7 @@ void Processor::process(int maxSecondsCnt, int startSecond) {
 
 	while (++fIndex < ttlFrmsCnt) {
 		// frame by frame
-		std::cout << ">>>>> Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ..." <<std::endl;
+		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ...");
 		std::vector<Mat> tmpFrms(camCnt);
 		Mat dstImage;
 
@@ -144,7 +147,7 @@ void Processor::process(int maxSecondsCnt, int startSecond) {
 				Range(centerOfCircleBeforeResz.x-radiusOfCircle, centerOfCircleBeforeResz.x+radiusOfCircle))
 				.clone();	// must use clone()
 			
-			//TOSOLVE dst.size() set to 0.9 of src.size() ?
+			
 			dstFrms[i].create(srcFrms[i].rows, srcFrms[i].cols, srcFrms[i].type());
 		}
 
@@ -158,14 +161,15 @@ void Processor::process(int maxSecondsCnt, int startSecond) {
 		std::cout << "\tCorrecting ..." <<std::endl;
 		for (int i=0; i<camCnt; ++i) {
 			fisheyeCorrect(srcFrms[i], dstFrms[i]);
+			//resize(dstFrms[i], dstFrms[i], Size(1000,1000));
 		}
 		std::cout << "\tStitching ..." <<std::endl;
 		panoStitch(dstFrms, dstImage);
 		Mat forshow;
-		resize(dstImage, forshow, Size(dstImage.cols/3, dstImage.rows/3));
+		resize(dstImage, forshow, Size(dstImage.cols/2, dstImage.rows/2));
 		imshow("windows11",forshow);
-		waitKey();
+		cvWaitKey();
 
-		vWriter << dstImage;
+		//vWriter << dstImage;
 	}
 }

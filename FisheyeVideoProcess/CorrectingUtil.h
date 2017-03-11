@@ -117,7 +117,7 @@ struct ReMapping{
 			i = (it->second).first, j = (it->second).second;
 			dstImage.at<Vec3b>(i_dst,j_dst) = srcImage.at<Vec3b>(i,j);
 		}
-		std::cout << "[Message] ReMapping used." << std::endl;
+		LOG_MESS("ReMapping used.");
 		return true;
 	}
 
@@ -135,7 +135,7 @@ struct ReMapping{
 			FILE *fpSrc = NULL;
 			int a,b,c,d;
 			if ((fpSrc = fopen(getPersistFilename(cpHash).c_str(), "rb")) == NULL) {
-				std::cout << "[Warning] Load ReMapping cannot be found." << std::endl;
+				LOG_WARN("Load ReMapping cannot be found.");
 				return false;
 			}
 			map.clear();
@@ -147,11 +147,11 @@ struct ReMapping{
 				map[kv.first] = kv.second;
 			}
 			bMapped = true;
-			std::cout << "[Message] Successfully Load ReMapping data." << std::endl;
+			LOG_MESS("Successfully Load ReMapping data.");
 			fclose(fpSrc);
 			return true;
 		} catch(...) {
-			std::cout << "[Error] Load ReMapping data UNKNOWN error." << std::endl;
+			LOG_ERR("Load ReMapping data UNKNOWN error.");
 			return false;
 		}
 	}
@@ -161,7 +161,7 @@ struct ReMapping{
 		try {
 			FILE *fpDst;
 			if ((fpDst = fopen(getPersistFilename(cpHash).c_str(), "wb+")) == NULL) {
-				std::cout << "[Warning] Persist ReMapping cannot be found." << std::endl;
+				LOG_WARN("Persist ReMapping cannot be found.");
 				return;
 			}
 			std::pair<std::pair<int,int>, std::pair<int,int>> kv;
@@ -173,7 +173,7 @@ struct ReMapping{
 			}
 			fclose(fpDst);
 		} catch(...) {
-			std::cout << "[Error] Persist ReMapping data UNKNOWN error." << std::endl;
+			LOG_ERR("Persist ReMapping data UNKNOWN error.");
 			return;
 		}
 	}

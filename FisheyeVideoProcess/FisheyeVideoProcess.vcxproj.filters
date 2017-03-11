@@ -27,6 +27,12 @@
     <ClInclude Include="StitchingUtil.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="TestCase.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="MyLog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Processor.cpp">

@@ -85,8 +85,10 @@
   <ItemGroup>
     <ClInclude Include="Config.h" />
     <ClInclude Include="CorrectingUtil.h" />
+    <ClInclude Include="MyLog.h" />
     <ClInclude Include="Processor.h" />
     <ClInclude Include="StitchingUtil.h" />
+    <ClInclude Include="TestCase.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CorrectingUtil.cpp" />

@@ -36,7 +36,7 @@ private:
 	#define kFlannNumTrees 4 // by default
 
 	void opencvStitching(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType);
-	void opencvSelfStitching(std::vector<Mat> &srcs, Mat &dstImage);
+	std::vector<UMat> convertMatToUMat(std::vector<Mat> &input);
 	void facebookKeyPointMatching(Mat &left, Mat &right, std::vector<std::pair<Point2f, Point2f>> &matchedPair);
 	// TODO: Facebook Stitching method
 	void facebookStitching();
@@ -51,8 +51,8 @@ private:
 #ifdef OPENCV_3
 	void matchWithAKAZE(const Mat&, const Mat&, std::vector<std::pair<Point2f, Point2f>>& );
 #endif
-	Mat getMask(const Mat &srcImage, bool isLeft);
-	std::vector<cv::Rect> getMaskROI(const Mat &srcImage, bool isLeft);
+	
+	
 	void showMatchingPair(
 		const Mat &left, const std::vector<KeyPoint> &kptL,
 		const Mat &right, const std::vector<KeyPoint> &kptR, const std::vector<DMatch> &goodMatches);
@@ -60,7 +60,7 @@ private:
 	cv::Stitcher opencvStitcherBuild(StitchingType sType);
 
 	void unzipMatchedPair(std::vector<std::pair<Point2f, Point2f>> &, std::vector<Point2f> &, std::vector<Point2f> &);
-	void getGrayScale(std::vector<Mat> &, std::vector<Mat> &);
+	void getGrayScaleAndFiltered(std::vector<Mat> &, std::vector<Mat> &);
 	static bool _cmp_p2f(const Point2f &a, const Point2f &b);
 	static bool _cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b);
 
@@ -69,6 +69,9 @@ private:
 public:
 	StitchingUtil(){};
 	~StitchingUtil(){};
+	static Mat getMask(const Mat &srcImage, bool isLeft);
+	static std::vector<cv::Rect> getMaskROI(const Mat &srcImage, bool isLeft);
+	static void opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage);
 	
 	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_ONE_SIDE, StitchingType sType = OPENCV_DEFAULT);
 };

@@ -6,6 +6,7 @@
 #include <opencv2\highgui\highgui.hpp>
 #include <assert.h>
 #include <string.h>
+#include "MyLog.h"
 
 #define PI 3.14159265358979323846
 #define RESOURCE_PATH ".\\Resources\\"
@@ -19,6 +20,11 @@
 #else
 	//may define sth
 	#define OPENCV3_CONTRIB
+#endif
+
+#define RUN_MAIN
+#ifndef RUN_MAIN
+	#define RUN_TEST
 #endif
 
 using namespace cv;
