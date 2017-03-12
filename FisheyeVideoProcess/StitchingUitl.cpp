@@ -405,6 +405,7 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 	iu.USM(dstFB, dstFB);
 
 	const double ratio = 1.0/(4*(1-OVERLAP_RATIO_DOUBLESIDE));
+	const double overlapRatio_tolerance = OVERLAP_RATIO_DOUBLESIDE*1.05;
 	Mat dstTmp;
 	std::vector<Mat> tmpSrc;
 	tmpSrc.push_back(
@@ -413,7 +414,7 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 		dstBF(Range(0,dstBF.rows), Range(max(0.0,0.5-ratio)*dstBF.cols,min(1.0,0.5+ratio)*dstBF.cols)).clone());
 	// dstTmp: F-B-F
 	StitchingUtil::osParam.blend_strength = 0;
-	_stitch(tmpSrc,dstTmp,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8));	//0.9 --> tolerance
+	_stitch(tmpSrc,dstTmp,sType,std::make_pair(overlapRatio_tolerance,0.7));	
 	iu.USM(dstTmp, dstTmp);
 
 	//imshow("FBF",dstTmp);
@@ -424,7 +425,7 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 	tmpSrc.push_back(
 		dstTmp(Range(0,dstTmp.rows), Range(0,dstTmp.cols*0.5)).clone());
 	StitchingUtil::osParam.blend_strength = 1;
-	_stitch(tmpSrc,dstImage,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8));	//0.9 --> tolerance
+	_stitch(tmpSrc,dstImage,sType,std::make_pair(overlapRatio_tolerance,0.7));
 
 }
 
@@ -522,9 +523,11 @@ void StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst) {
 	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
 	if (restRatioPercent < 70) {
 		LOG_WARN("removeBlackPixelByDoubleScan() only remain " << restRatioPercent <<"% of src.")
+#ifdef SHOW_IMAGE
 		imshow("src",tmpSrc);
 		imshow("dst",dst);
 		cvWaitKey();
+#endif
 	}
 	
 }
@@ -584,9 +587,11 @@ bool StitchingUtil::removeBlackPixelByContourBound(Mat &src, Mat &dst) {
 	dst = src(interiorBoundingBox).clone();
 	if (restRatioPercent < 70) {
 		LOG_WARN("removeBlackPixelByContourBound() only remain " << restRatioPercent <<"% of src.")
+#ifdef SHOW_IMAGE
 		imshow("src",src);
 		imshow("dst",dst);
 		cvWaitKey();
+#endif
 	}
 	
 	return true;

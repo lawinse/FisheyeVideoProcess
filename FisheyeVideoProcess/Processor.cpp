@@ -177,10 +177,16 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			std::cout << "\tStitching ..." <<std::endl;
 			panoStitch(dstFrms, dstImage);
 			panoRefine(dstImage, dstImage);
+#ifdef SHOW_IMAGE
 			Mat forshow;
 			resize(dstImage, forshow, Size(1400, 700));
 			imshow("windows11",forshow);
 			cvWaitKey();
+#endif
+			
+			std::string dstname;
+			GET_STR(OUTPUT_PATH << fIndex << ".jpg", dstname);
+			imwrite(dstname, dstImage);
 
 			vWriter << dstImage;
 		} catch (cv::Exception e) {

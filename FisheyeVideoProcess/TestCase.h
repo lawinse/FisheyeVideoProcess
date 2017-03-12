@@ -35,7 +35,9 @@ public:
 	}
 
 	void test2() {
-		LOG_ERR("dgsafgfsd" << "dsfafdasf" << "d34634634");
+		std::string s;
+		GET_STR(1<<3<<"343",s);
+		std::cout << s;
 	}
 
 	void test3() {

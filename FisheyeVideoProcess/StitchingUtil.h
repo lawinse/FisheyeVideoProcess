@@ -49,10 +49,10 @@ struct OpenCVStitchParam {
 			workMegapix = 0.8;
 			seamMegapix = 0.1;
 			composeMegapix = 0.8;
-			conf_thresh = 0.8;
+			conf_thresh = 0.7;
 			wave_correct = cv::detail::WAVE_CORRECT_HORIZ;
 			expos_comp_type = cv::detail::ExposureCompensator::GAIN_BLOCKS;
-			match_conf = 0.5f;
+			match_conf = 0.3f;
 			blend_type = cv::detail::Blender::MULTI_BAND;
 			blend_strength = 5;
 		}

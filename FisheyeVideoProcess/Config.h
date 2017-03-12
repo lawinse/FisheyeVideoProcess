@@ -13,6 +13,13 @@
 #define OUTPUT_PATH ".\\Outputs\\"
 #define TEMP_PATH ".\\Temp\\"
 
+#define GET_STR(msg,s)	\
+	{\
+		std::stringstream ss;\
+		ss << msg;\
+		s=ss.str();\
+	}
+
 
 #define OPENCV_3
 #ifndef OPENCV_3
@@ -26,6 +33,7 @@
 #ifndef RUN_MAIN
 	#define RUN_TEST
 #endif
+//#define SHOW_IMAGE
 
 using namespace cv;
 
