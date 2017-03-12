@@ -122,7 +122,7 @@ void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	tmp = srcImage.clone();
 	// USM
 	ImageUtil().USM(tmp,tmp2);
-	resize(tmp2, tmp2, dstPanoSize);
+	resize(tmp2, tmp2, dstPanoSize,0,0,INTER_LANCZOS4);
 	dstImage = tmp2.clone();
 }
 

@@ -29,7 +29,7 @@ int main(int argc, char ** args) {
 		RESOURCE_PATH + (std::string)"front.mp4"
 	};
 	processor.setPaths(oriSrc,sizeof(oriSrc)/sizeof(std::string),OUTPUT_PATH + (std::string)"test.avi"); //TOSOLVE: ouput must be avi format??
-	processor.process(1,5);
+	processor.process(1,11);
 #elif defined(RUN_TEST)
 	TestCase tc;
 	tc.test1();

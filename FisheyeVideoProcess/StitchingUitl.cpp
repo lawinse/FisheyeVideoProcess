@@ -413,16 +413,18 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 		dstBF(Range(0,dstBF.rows), Range(max(0.0,0.5-ratio)*dstBF.cols,min(1.0,0.5+ratio)*dstBF.cols)).clone());
 	// dstTmp: F-B-F
 	StitchingUtil::osParam.blend_strength = 0;
-	_stitch(tmpSrc,dstTmp,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE*0.9,0.8));	//0.9 --> tolerance
-	imshow("FBF",dstTmp);
+	_stitch(tmpSrc,dstTmp,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8));	//0.9 --> tolerance
 	iu.USM(dstTmp, dstTmp);
+
+	imshow("FBF",dstTmp);
 	cvWaitKey();
 	tmpSrc.clear();
 	tmpSrc.push_back(
 		dstTmp(Range(0,dstTmp.rows), Range(dstTmp.cols*0.5,dstTmp.cols)).clone());
 	tmpSrc.push_back(
 		dstTmp(Range(0,dstTmp.rows), Range(0,dstTmp.cols*0.5)).clone());
-	_stitch(tmpSrc,dstImage,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE*0.9,0.8));	//0.9 --> tolerance
+	StitchingUtil::osParam.blend_strength = 1;
+	_stitch(tmpSrc,dstImage,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8));	//0.9 --> tolerance
 
 }
 
@@ -490,32 +492,38 @@ std::vector<UMat> StitchingUtil::convertMatToUMat(std::vector<Mat> &input) {
 	return ret;
 }
 
-inline bool StitchingUtil::almostBlack(const Vec3b &v) {
-	const double tolerance = square(15);
-	return square(v[0]) + square(v[1]) + square(v[2]) <= tolerance;
+bool StitchingUtil::almostBlack(const Vec3b &v) {
+	const int tolerance = 15*15;
+	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2] <= tolerance;
 }
 
 
 void StitchingUtil::removeBlackPixelByBound(Mat &src, Mat &dst) {
 	// first find height boundary
-	int widthSideTolerance = src.cols*0.02;
-	int maxRows = src.rows, minRows = 0;
-	int maxCols = src.cols, minCols = 0;
-	for (int i=widthSideTolerance; i<src.cols-widthSideTolerance; ++i) {
-		for (;almostBlack(src.at<Vec3b>(maxRows, i)); --maxRows);
-		for (;almostBlack(src.at<Vec3b>(minRows, i)); ++minRows);
+	Mat_<Vec3b> tmpSrc = src;
+	//imshow("src",tmpSrc);
+	//	cvWaitKey();
+	int widthSideTolerance = tmpSrc.cols*0.02;
+	int maxRows = tmpSrc.rows-1, minRows = 0;
+	int maxCols = tmpSrc.cols-1, minCols = 0;
+	LOG_MESS(widthSideTolerance << " " << maxRows);
+	for (int i=widthSideTolerance; i<tmpSrc.cols-widthSideTolerance; ++i) {
+		for (;maxRows>=0 && almostBlack(tmpSrc(maxRows, i)); --maxRows);
+		for (;minRows<tmpSrc.rows&&almostBlack(tmpSrc(minRows, i)); ++minRows);
 	}
 	// then find width boundary
 	for (int j=minRows; j <= maxRows; ++j) {
-		for (;almostBlack(src.at<Vec3b>(j, maxCols)); --maxCols);
-		for (;almostBlack(src.at<Vec3b>(j, minCols)); ++minCols);
+		for (;maxCols>=0&&almostBlack(tmpSrc(j, maxCols)); --maxCols);
+		for (;minCols<tmpSrc.cols&&almostBlack(tmpSrc(j, minCols)); ++minCols);
 	}
 
-	double restRatioPercent = (maxRows-minRows+1)*(maxCols-minCols+1)*100.0/(src.cols*src.rows);
+	double restRatioPercent = (maxRows-minRows+1)*(maxCols-minCols+1)*100.0/(tmpSrc.cols*tmpSrc.rows);
 	LOG_MESS("Remove black pixel, remain:" << restRatioPercent << "%");
+	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
 	if (restRatioPercent < 70) {
-		imshow("src",src);
+		imshow("src",tmpSrc);
+		imshow("dst",dst);
 		cvWaitKey();
 	}
-	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
+	
 }
