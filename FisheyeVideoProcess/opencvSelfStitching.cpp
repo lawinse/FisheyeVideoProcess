@@ -232,7 +232,7 @@ void StitchingUtil::opencvSelfStitching(
 	Mat result, result_mask, tmp;
 	blender->blend(result, result_mask);
 	result.convertTo(tmp, CV_8UC3);
-	removeBlackPixelByBound(tmp, dstImage);
+	removeBlackPixel(tmp, dstImage);
 	LOG_MESS("Size of Pano:" << dstImage.size());
 	return;
 }

@@ -396,9 +396,9 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 	std::reverse(srcs.begin(), srcs.end());
 	_stitch(srcs, dstFB, sType);
 	std::reverse(srcs.begin(), srcs.end());
-	imshow("BF",dstBF);
-	imshow("FB",dstFB);
-	cvWaitKey();
+	//imshow("BF",dstBF);
+	//imshow("FB",dstFB);
+	//cvWaitKey();
 
 	ImageUtil iu;
 	iu.USM(dstBF, dstBF);
@@ -416,8 +416,8 @@ void StitchingUtil::_stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, Sti
 	_stitch(tmpSrc,dstTmp,sType,std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8));	//0.9 --> tolerance
 	iu.USM(dstTmp, dstTmp);
 
-	imshow("FBF",dstTmp);
-	cvWaitKey();
+	//imshow("FBF",dstTmp);
+	//cvWaitKey();
 	tmpSrc.clear();
 	tmpSrc.push_back(
 		dstTmp(Range(0,dstTmp.rows), Range(dstTmp.cols*0.5,dstTmp.cols)).clone());
@@ -493,12 +493,12 @@ std::vector<UMat> StitchingUtil::convertMatToUMat(std::vector<Mat> &input) {
 }
 
 bool StitchingUtil::almostBlack(const Vec3b &v) {
-	const int tolerance = 15*15;
+	const int tolerance = square(3*BLACK_TOLERANCE);
 	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2] <= tolerance;
 }
 
 
-void StitchingUtil::removeBlackPixelByBound(Mat &src, Mat &dst) {
+void StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst) {
 	// first find height boundary
 	Mat_<Vec3b> tmpSrc = src;
 	//imshow("src",tmpSrc);
@@ -521,9 +521,118 @@ void StitchingUtil::removeBlackPixelByBound(Mat &src, Mat &dst) {
 	LOG_MESS("Remove black pixel, remain:" << restRatioPercent << "%");
 	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
 	if (restRatioPercent < 70) {
+		LOG_WARN("removeBlackPixelByDoubleScan() only remain " << restRatioPercent <<"% of src.")
 		imshow("src",tmpSrc);
 		imshow("dst",dst);
 		cvWaitKey();
 	}
 	
+}
+// REF: http://stackoverflow.com/questions/21410449/how-do-i-crop-to-largest-interior-bounding-box-in-opencv
+bool StitchingUtil::removeBlackPixelByContourBound(Mat &src, Mat &dst) {
+	Mat grayscale;
+	cvtColor(src, grayscale, CV_BGR2GRAY);
+	Mat mask = grayscale > BLACK_TOLERANCE;
+
+	std::vector<std::vector<Point>> contours;
+	std::vector<Vec4i> hierarchy;
+
+	findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE, Point(0,0));
+	Mat contourImg = Mat::zeros(src.size(), CV_8UC3);
+
+	int maxSz = 0, id = 0;
+	for (int i=0; i<contours.size(); ++i) {
+		if (contours.at(i).size() > maxSz) {
+			maxSz = contours.at(i).size();
+			id = i;
+		}
+	}
+
+	Mat contourMask = cv::Mat::zeros(src.size(), CV_8UC1);
+	drawContours(contourMask, contours, id, Scalar(255), -1, 8, hierarchy,0,Point());
+
+	std::vector<Point> cSortedX = contours.at(id);
+	std::sort(cSortedX.begin(), cSortedX.end(), [](const Point &a, const Point &b){return a.x<b.x;});
+	std::vector<Point> cSortedY = contours.at(id);
+	std::sort(cSortedY.begin(), cSortedY.end(), [](const Point &a, const Point &b){return a.y<b.y;});
+	int minX = 0, maxX = cSortedX.size()-1;
+	int minY = 0, maxY = cSortedY.size()-1;
+
+	Rect interiorBoundingBox;
+
+	while(minX < maxX && minY < maxY) {
+		Point minP(cSortedX[minX].x, cSortedY[minY].y);
+		Point maxP(cSortedX[maxX].x, cSortedY[maxY].y);
+		interiorBoundingBox = Rect(minP.x, minP.y, maxP.x-minP.x, maxP.y-minP.y);
+		// out-codes
+		int ocTop = 0, ocBottom = 0, ocLeft = 0, ocRight = 0;
+
+		if (checkInterior(contourMask, interiorBoundingBox, ocTop, ocBottom, ocLeft, ocRight))
+			break;
+		if (ocLeft) ++minX;
+		if (ocRight)--maxX;
+		if (ocTop) ++minY;
+		if (ocBottom) --maxY;
+		if (!(ocLeft || ocRight || ocTop || ocBottom)) {
+			LOG_WARN("removeBlackPixelByContourBound() failed. Using removeBlackPixelByDoubleScan() instead.");
+			return false;
+		}
+
+	}
+	double restRatioPercent = interiorBoundingBox.size().area()*100.0/src.size().area();
+	LOG_MESS("Remove black pixel, remain:" << interiorBoundingBox << " " << restRatioPercent << "%");
+	dst = src(interiorBoundingBox).clone();
+	if (restRatioPercent < 70) {
+		LOG_WARN("removeBlackPixelByContourBound() only remain " << restRatioPercent <<"% of src.")
+		imshow("src",src);
+		imshow("dst",dst);
+		cvWaitKey();
+	}
+	
+	return true;
+}
+
+bool StitchingUtil::checkInterior(const Mat& mask, const Rect& interiorBB, int& top, int& bottom, int& left, int& right) {
+	bool ret = true;
+	Mat sub = mask(interiorBB);
+	int x=0,y=0;
+	int _top = 0, _bottom = 0, _left = 0, _right = 0;
+
+	for (; x<sub.cols; ++x) {
+		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+			ret = false;
+			++_top;
+		}
+	}
+	for (y=sub.rows-1, x=0; x<sub.cols; ++x) {
+		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+			ret = false;
+			++_bottom;
+		}
+	}
+	for (x=0,y=0; y<sub.rows; ++y) {
+		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+			ret = false;
+			++_left;
+		}
+	}
+	for (x=sub.cols-1,y=0; y<sub.rows; ++y) {
+		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+			ret = false;
+			++_right;
+		}
+	}
+
+	if (_top > _bottom) {
+		if (_top > _left && _top > _right) top=1;
+	} else {
+		if (_bottom > _left && _bottom > _right) bottom = 1;
+	}
+
+	if (_left >= _right) {
+		if (_left >= _bottom && _left >= _top) left = 1;
+	} else {
+		if (_right >= _top && _right >= _bottom) right = 1;
+	}
+	return ret;
 }

@@ -32,7 +32,7 @@ int main(int argc, char ** args) {
 	processor.process(1,11);
 #elif defined(RUN_TEST)
 	TestCase tc;
-	tc.test1();
+	tc.test3();
 	system("pause");
 #endif
 }

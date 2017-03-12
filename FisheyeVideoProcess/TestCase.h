@@ -2,6 +2,7 @@
 #include "Config.h"		
 #include "StitchingUtil.h"
 #include "MyLog.h"
+#include <algorithm>
 using namespace std;
 using namespace cv;
 using namespace cv::detail;
@@ -37,5 +38,11 @@ public:
 		LOG_ERR("dgsafgfsd" << "dsfafdasf" << "d34634634");
 	}
 
-
+	void test3() {
+		cv::Mat input = cv::imread(RESOURCE_PATH+(std::string)"result1.jpg");
+		Mat dst;
+		StitchingUtil::removeBlackPixel(input, dst);
+		imshow("dst",dst);
+		cvWaitKey();
+	}
 };

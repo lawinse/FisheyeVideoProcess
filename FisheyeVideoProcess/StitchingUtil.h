@@ -65,6 +65,7 @@ private:
 	#define kFlannNumTrees 4 // by default
 	#define defaultMaskRatio std::make_pair(0.25,0.8) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
 	#define OVERLAP_RATIO_DOUBLESIDE 0.25
+	#define BLACK_TOLERANCE 3
 	
 
 
@@ -100,6 +101,9 @@ private:
 	void _stitch(const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, std::pair<double, double> &ratio=defaultMaskRatio);
 	void _stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType);
 
+	static void removeBlackPixelByDoubleScan(Mat &, Mat &);
+	static bool removeBlackPixelByContourBound(Mat &, Mat &);
+	static bool checkInterior(const Mat& mask, const Rect& interiorBB, int &top, int &bottom, int &left, int &right);
 public:
 	OpenCVStitchParam osParam;
 	StitchingUtil(){osParam = OpenCVStitchParam();}
@@ -112,7 +116,7 @@ public:
 		const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio=defaultMaskRatio);
 	void opencvSelfStitching(
 		const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz, std::pair<double, double> &maskRatio=defaultMaskRatio);
-	static void removeBlackPixelByBound(Mat &, Mat &);
+	static void removeBlackPixel(Mat &src, Mat &dst) {if (!removeBlackPixelByContourBound(src,dst)) removeBlackPixelByDoubleScan(src,dst);}
 	void doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_ONE_SIDE, StitchingType sType = OPENCV_DEFAULT);
 };
 
