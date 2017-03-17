@@ -1,94 +1,122 @@
 #include "StitchingUtil.h"
 using namespace cv::detail;
-StitchingInfo StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio) {
-	Size minSize = srcs[0].size();
-	for (auto src:srcs) {
-		if (src.size().area() < minSize.area()) minSize = src.size();
-	}
-	return opencvSelfStitching(srcs,dstImage, minSize , maskRatio);
+StitchingInfo StitchingUtil::opencvSelfStitching(
+	const std::vector<Mat> &srcs, Mat &dstImage, StitchingInfo &sInfo, std::pair<double, double> &maskRatio) {
+		Size minSize = srcs[0].size();
+		if (sInfo.isNull()) {
+			for (auto src:srcs) {
+				if (src.size().area() < minSize.area()) minSize = src.size();
+			}
+		}
+		return opencvSelfStitching(srcs,dstImage, minSize, sInfo, maskRatio);
 }
 
 StitchingInfo StitchingUtil::opencvSelfStitching(
-	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,std::pair<double, double> &maskRatio) {
+	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,StitchingInfo &sInfoNotNull, std::pair<double, double> &maskRatio) {
 	StitchingInfo sInfo;
-	int imgCnt = srcs.size(); 
-	
-	sInfo.imgCnt = imgCnt;
-	sInfo.maskRatio = maskRatio;
-	sInfo.resizeSz - resizeSz;
 
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
-	LOG_MESS("Finding features... with MaskRatio (" << maskRatio.first << "," << maskRatio.second <<")");
-
-	Ptr<FeaturesFinder> finder;
-	finder = new SurfFeaturesFinder();
-
+	double seam_work_aspect = 1;
 	Mat full_img1,full_img, img;
-	std::vector<ImageFeatures> features(imgCnt);
+	int imgCnt = srcs.size(); 
+	float warped_image_scale;
+	std::vector<CameraParams> cameras;
 	std::vector<Mat> images(imgCnt);
 	std::vector<Size> full_img_sizes(imgCnt);
-	double seam_work_aspect = 1;
 
-	for (int i = 0; i < imgCnt; ++i) {
-		full_img1 = srcs[i].clone();
-		//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
-		resize(full_img1,full_img, resizeSz);
-		full_img_sizes[i] = full_img.size();
-		work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
 
-		resize(full_img, img, Size(), work_scale, work_scale);
-		seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
-		seam_work_aspect = seam_scale / work_scale;
-		(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i,imgCnt, maskRatio));
-		features[i].img_idx = i;
-		LOG_MESS("Features in image #" << i+1 << ": " << features[i].keypoints.size());
-		resize(full_img, img, Size(), seam_scale, seam_scale);
-		images[i] = img.clone();
-	}
+	if (!sInfoNotNull.isNull()) {
+		assert(imgCnt == sInfoNotNull.imgCnt);
+		sInfo.imgCnt = sInfoNotNull.imgCnt;
+		sInfo.maskRatio = sInfoNotNull.maskRatio;
+		sInfo.resizeSz = sInfoNotNull.resizeSz;
+		sInfo.cameras = cameras = sInfoNotNull.cameras;
+		sInfo.warpedImageScale = warped_image_scale = sInfoNotNull.warpedImageScale;
+		for (int i = 0; i < imgCnt; ++i) {
+			full_img1 = srcs[i].clone();
+			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
+			resize(full_img1,full_img, sInfo.resizeSz);
+			full_img_sizes[i] = full_img.size();
+			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
+			resize(full_img, img, Size(), work_scale, work_scale);
+			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
+			seam_work_aspect = seam_scale / work_scale;
+			resize(full_img, img, Size(), seam_scale, seam_scale);
+			images[i] = img.clone();
+		}
 
-	finder->collectGarbage();
-	full_img.release();
-	img.release();
+	} else {
+		Ptr<FeaturesFinder> finder;
+		finder = new SurfFeaturesFinder();
+		std::vector<ImageFeatures> features(imgCnt);
+		
+		sInfo.imgCnt = imgCnt;
+		sInfo.maskRatio = maskRatio;
+		sInfo.resizeSz = resizeSz;
+		LOG_MESS("Finding features... with MaskRatio (" << sInfo.maskRatio.first << "," << sInfo.maskRatio.second <<")");
+		for (int i = 0; i < imgCnt; ++i) {
+			full_img1 = srcs[i].clone();
+			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
+			resize(full_img1,full_img, sInfo.resizeSz);
+			full_img_sizes[i] = full_img.size();
+			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
 
-	LOG_MESS("Pairwise matching ...");
-	std::vector<MatchesInfo> pairwise_matches;
-	BestOf2NearestMatcher matcher(false, osParam.match_conf);
-	matcher(features, pairwise_matches); 
-	matcher.collectGarbage();
+			resize(full_img, img, Size(), work_scale, work_scale);
+			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
+			seam_work_aspect = seam_scale / work_scale;
+			(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i,imgCnt, sInfo.maskRatio));
+			features[i].img_idx = i;
+			LOG_MESS("Features in image #" << i+1 << ": " << features[i].keypoints.size());
+			resize(full_img, img, Size(), seam_scale, seam_scale);
+			images[i] = img.clone();
+		}
 
-	HomographyBasedEstimator estimator;
-	std::vector<CameraParams> cameras;
-	estimator(features, pairwise_matches, cameras);
+		finder->collectGarbage();
+		full_img.release();
+		img.release();
 
-	for (size_t i = 0; i < cameras.size(); ++i) {
-		Mat R;
-		cameras[i].R.convertTo(R, CV_32F);
-		cameras[i].R = R;
-		LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << cameras[i].K());
-	}
+		LOG_MESS("Pairwise matching ...");
+		std::vector<MatchesInfo> pairwise_matches;
+		BestOf2NearestMatcher matcher(false, osParam.match_conf);
+		matcher(features, pairwise_matches); 
+		matcher.collectGarbage();
 
-	Ptr<detail::BundleAdjusterBase> adjuster;
-	adjuster = new detail::BundleAdjusterRay();
+		HomographyBasedEstimator estimator;
+		estimator(features, pairwise_matches, cameras);
 
-	adjuster->setConfThresh(osParam.conf_thresh);
-	Mat_<uchar> refine_mask = Mat::zeros(3, 3, CV_8U);
-	refine_mask(0,0) = 1;
-	refine_mask(0,1) = 1;
-	refine_mask(0,2) = 1;
-	refine_mask(1,1) = 1;
-	refine_mask(1,2) = 1;
-	adjuster->setRefinementMask(refine_mask);
-	(*adjuster)(features, pairwise_matches, cameras);
+		for (size_t i = 0; i < cameras.size(); ++i) {
+			Mat R;
+			cameras[i].R.convertTo(R, CV_32F);
+			cameras[i].R = R;
+			LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << cameras[i].K());
+		}
+
+		Ptr<detail::BundleAdjusterBase> adjuster;
+		adjuster = new detail::BundleAdjusterRay();
+
+		adjuster->setConfThresh(osParam.conf_thresh);
+		Mat_<uchar> refine_mask = Mat::zeros(3, 3, CV_8U);
+		refine_mask(0,0) = 1;
+		refine_mask(0,1) = 1;
+		refine_mask(0,2) = 1;
+		refine_mask(1,1) = 1;
+		refine_mask(1,2) = 1;
+		adjuster->setRefinementMask(refine_mask);
+		(*adjuster)(features, pairwise_matches, cameras);
 
 	
-	std::vector<double> focals;
-	for (size_t i = 0; i < cameras.size(); ++i) {
-		LOG_MESS("Camera #" << i+1 << ":\n" << cameras[i].K());
-		focals.push_back(cameras[i].focal);
-	}
+		std::vector<double> focals;
+		for (size_t i = 0; i < cameras.size(); ++i) {
+			LOG_MESS("Camera #" << i+1 << ":\n" << cameras[i].K());
+			focals.push_back(cameras[i].focal);
+		}
 
-	sort(focals.begin(), focals.end());
-	float warped_image_scale =(focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
+		sort(focals.begin(), focals.end());
+		warped_image_scale =(focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
+
+		sInfo.cameras = cameras;
+		sInfo.warpedImageScale = warped_image_scale;
+	}
 
 	std::vector<Mat> rmats;
 	for (size_t i = 0; i < cameras.size(); ++i)
@@ -96,8 +124,6 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	waveCorrect(rmats, osParam.wave_correct);
 	for (size_t i = 0; i < cameras.size(); ++i)
 		cameras[i].R = rmats[i];
-
-	sInfo.cameras = cameras;
 
 	LOG_MESS("Warping images ... ");
 
@@ -163,7 +189,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		// reCalculate corner and mask since the former estimation is based on work_scale
 		
 		full_img1 = srcs[img_idx].clone();
-		resize(full_img1,full_img, resizeSz);
+		resize(full_img1,full_img, sInfo.resizeSz);
 		compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
 		compose_work_aspect = compose_scale / work_scale;
 		warped_image_scale *= static_cast<float>(compose_work_aspect);

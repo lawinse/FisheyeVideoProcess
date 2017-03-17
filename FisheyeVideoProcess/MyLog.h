@@ -30,9 +30,9 @@ extern FILE *fplog;
 
 	#define LOG_MARK(msg)                     \
 		std::cout << ">>>>> " << msg << std::endl;\
-		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".mess"));\
-		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".warn"));\
-		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".err"));
+		WRITE_LOG(">>>>> " << msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".mess"));\
+		WRITE_LOG(">>>>> " << msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".warn"));\
+		WRITE_LOG(">>>>> " << msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".err"));
 #else
 	#define LOG_ERR(msg)                     \
 		std::cout << "[Error] " << msg << std::endl;

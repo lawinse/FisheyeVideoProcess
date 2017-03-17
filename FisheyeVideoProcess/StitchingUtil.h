@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Config.h"
+#include <unordered_map>
+
 #ifdef OPENCV_3
 	#include<opencv2\stitching.hpp>
 	#include <opencv2\stitching\detail\matchers.hpp>
@@ -61,24 +63,69 @@ struct OpenCVStitchParam {
 		}
 };
 
+class StitchingInfo;
+typedef std::vector<StitchingInfo> StitchingInfoGroup;
+
 class StitchingInfo {
 public:
 	int imgCnt;
+	double nonBlackRatio;
+	float warpedImageScale;
+	Size resizeSz;
+	
+	std::pair<double, double> maskRatio;
 	std::vector<Range> ranges;	// only cares width-wise
 	std::vector<cv::detail::CameraParams> cameras;
-	Size resizeSz;
-	std::pair<double, double> maskRatio;
-	double nonBlackRatio;
 
 	StitchingInfo(){clear();}
+	friend std::ostream& operator <<(std::ostream&, const StitchingInfo&);
 	void clear();
 	bool isNull();
 	void setRanges(const std::vector<Point> &corners, const std::vector<Size> &sizes);
 	void setRanges(const Range &fullImgeRange);
+	bool isSuccess() const;
+	double evaluate() const;
 
-	// double evaluate(...);
+	static bool isSuccess(const StitchingInfoGroup &);
+	static double evaluate(const StitchingInfoGroup &);
 };
-typedef std::vector<StitchingInfo> StitchingInfoGroup;
+
+class LocalStitchingInfoGroup {
+	#define LSIG_WINDOW_SIZE 5
+	#define LSIG_BEST_NUM 1
+	int wSize;
+	int startIdx, endIdx;
+	std::unordered_map<int, std::pair<StitchingInfoGroup,double>> groups;
+	std::unordered_map<int, std::vector<Mat>> stitchingWaitingBuff;
+	std::vector<std::pair<int, Mat>> stitchedBuff;
+
+
+
+public:
+	LocalStitchingInfoGroup(int _wSize = LSIG_WINDOW_SIZE):wSize(_wSize),startIdx(0),endIdx(0){
+	}
+	int getEndIdx() const {return endIdx;}
+	bool cover(int l, int r) {return startIdx <= l && endIdx >= r;}
+	bool empty() const {return endIdx-startIdx == 0;}
+	int push_back(StitchingInfoGroup g);
+	void addToWaitingBuff(int fidx, std::vector<Mat>&);
+	bool getFromWaitingBuff(int fidx, std::vector<Mat>& v) {
+		auto ret = stitchingWaitingBuff.find(fidx);
+		if (ret != stitchingWaitingBuff.end()) {
+			v = (*ret).second; return true;
+		} else {
+			LOG_ERR("Cannot find " << fidx << " frame src data.")
+			return false;
+		}
+		
+	}
+	void addToStitchedBuff(int fidx, Mat& m) {stitchedBuff.push_back(std::make_pair(fidx,m.clone()));}
+	std::vector<std::pair<int, Mat>>* getStitchedBuff() {return &stitchedBuff;}
+	void clearStitchedBuff() {stitchedBuff.clear();}
+	StitchingInfoGroup getAver(int head, int tail);
+
+};
+
 
 
 class StitchingUtil {
@@ -90,6 +137,7 @@ private:
 	#define OVERLAP_RATIO_DOUBLESIDE 0.25
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
 	#define BLACK_TOLERANCE 3
+	#define NONBLACK_REMAIN_FLOOR 0.75
 	
 
 
@@ -123,8 +171,9 @@ private:
 	static bool _cmp_p2f(const Point2f &a, const Point2f &b);
 	static bool _cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b);
 
-	StitchingInfo _stitch(const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType, std::pair<double, double> &ratio=defaultMaskRatio);
-	StitchingInfoGroup _stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, const StitchingPolicy sp, const StitchingType sType);
+	StitchingInfo _stitch(
+		const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType,StitchingInfo &sInfoNotNull, std::pair<double, double> &ratio=defaultMaskRatio );
+	StitchingInfoGroup _stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, StitchingInfoGroup &, const StitchingPolicy sp, const StitchingType sType);
 
 	static void removeBlackPixelByDoubleScan(Mat &, Mat &, StitchingInfo &);
 	static bool removeBlackPixelByContourBound(Mat &, Mat &, StitchingInfo &);
@@ -140,12 +189,13 @@ public:
 	static std::vector<cv::Rect> getMaskROI(const Mat &srcImage, int index, int total, std::pair<double, double> &ratio=defaultMaskRatio);
 
 	StitchingInfo opencvSelfStitching(
-		const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio=defaultMaskRatio);
+		const std::vector<Mat> &srcs, Mat &dstImage,StitchingInfo &sInfo, std::pair<double, double> &maskRatio=defaultMaskRatio);
 	StitchingInfo opencvSelfStitching(
-		const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz, std::pair<double, double> &maskRatio=defaultMaskRatio);
+		const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz, StitchingInfo &sInfo, std::pair<double, double> &maskRatio=defaultMaskRatio);
 	static void removeBlackPixel(Mat &src, Mat &dst, StitchingInfo &sInfo) {
 		if (!removeBlackPixelByContourBound(src,dst,sInfo)) removeBlackPixelByDoubleScan(src,dst, sInfo);
 	}
-	StitchingInfoGroup doStitch(std::vector<Mat> &srcs, Mat &dstImage, StitchingPolicy sp = STITCH_ONE_SIDE, StitchingType sType = OPENCV_DEFAULT);
+	StitchingInfoGroup doStitch(
+		std::vector<Mat> &srcs, Mat &dstImage,StitchingInfoGroup &, StitchingPolicy sp = STITCH_ONE_SIDE, StitchingType sType = OPENCV_DEFAULT);
 };
 

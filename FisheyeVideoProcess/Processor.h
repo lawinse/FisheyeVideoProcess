@@ -4,6 +4,8 @@
 #include "StitchingUtil.h"
 #include "CorrectingUtil.h"
 
+
+
 class Processor {
 private:
 	VideoCapture vCapture[2];	// 0 stands for front and 1 stands for back, maybe more cam
@@ -14,20 +16,24 @@ private:
 	Point2i centerOfCircleBeforeResz;
 	Point2i centerOfCircleAfterResz;
 	int fps;
+	int ttlFrmsCnt;
 	Size dstPanoSize;
+
+	int curStitchingIdx;	// will have a gap between fIndex
 
 	// Utils
 	CorrectingUtil correctingUtil;
 	StitchingUtil stitchingUtil;
+	LocalStitchingInfoGroup *pLSIG;
 	
 	
 	void findFisheyeCircleRegion();
-	void fisheyeShirnk(Mat &frm);
 	void fisheyeCorrect(Mat &src, Mat &dst);
-	void panoStitch(std::vector<Mat> &srcs, Mat &dstImage);
+	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
 	void panoRefine(Mat &, Mat &dstImage);
+	void calculateWind(int fidx, int &lidx, int &ridx);
 public:
-	Processor();
+	Processor(LocalStitchingInfoGroup *);
 	~Processor();
 	void setPaths(std::string inputPaths[], int inputCnt, std::string outputPath);
 	void process(int maxSecCnt = INT_MAX, int startSecond = 0);

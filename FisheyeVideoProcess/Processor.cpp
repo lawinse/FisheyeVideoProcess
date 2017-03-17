@@ -2,13 +2,22 @@
 #include "CorrectingUtil.h"
 #include "ImageUtil.h"
 
-Processor::Processor() {
+Processor::Processor(LocalStitchingInfoGroup *_pLSIG) {
 	correctingUtil = CorrectingUtil();
 	stitchingUtil = StitchingUtil();
+	pLSIG = _pLSIG;
+	curStitchingIdx = 0;
 }
 
 Processor::~Processor() {
 }
+
+void Processor::calculateWind(int fidx, int &lidx, int &ridx) {
+	lidx = max(0, fidx-LSIG_WINDOW_SIZE/2);
+	ridx = min(ttlFrmsCnt, lidx + LSIG_WINDOW_SIZE);
+	lidx = min(lidx, ridx-LSIG_WINDOW_SIZE);
+}
+
 
 void Processor::findFisheyeCircleRegion() {
 	// TOSOLVE: Simplest estimation,
@@ -37,67 +46,6 @@ void Processor::setPaths(std::string inputPaths[], int inputCnt, std::string out
 	std::cout << "\t" << outputPath << std::endl;
 }
 
-void Processor::fisheyeShirnk(Mat &frm) {
-	Mat tmpFrm = frm.clone();
-	const int param1 = 200, param2 = 235;
-
-	int col, row;
-	int i, j;	//行、列循环变量
-	int u0, v0;	//圆中心坐标
-	int u, v;	//圆坐标系坐标
-	int u_235, v_235;
-	int R0;	//圆半径
-	double r;	//临时小圆半径
-	double R;	//临时大圆半径
-	int i_235, j_235;	//映射到235度圆内对应的点的坐标
-	double alpha;
-
-	col = tmpFrm.cols; //列数，x轴
-	row = tmpFrm.rows; //行数，y轴
-	u0 = round(col / 2);
-	v0 = round(row / 2);	//中心
-	R0 = col - u0;	//球形半径
-
-	for (i = 0; i < row; i++) {
-		for (j = 0; j < col; j++) {
-			u = j - u0;		//横坐标,原点在圆心
-			v = v0 - i;		//纵坐标,原点在圆心
-			R = sqrt(pow(u, 2) + pow(v, 2));	//到圆心的距离
-			if (R > R0)	{	//超过边界
-				continue;
-			}
-			r = R * param1 / param2;
-			//求alpha角
-			if (r == 0) {
-				alpha = 0;
-			}
-			else if (u > 0)	{
-				alpha = asin(v / R);	//用atan2(v,u) or asin(v/r)可以，但atan(v/u)不行
-			}
-			else if (u < 0)	{
-				alpha = M_PI - asin(v / R);
-			}
-			else if (u == 0 && v>0) {
-				alpha = M_PI / 2;
-			}
-			else
-				alpha = 3 * M_PI / 2;
-
-			//求映射到圆上的点
-			u_235 = round(r*cos(alpha));
-			v_235 = round(r*sin(alpha));
-			//坐标转换，坐标变矩阵
-			i_235 = v0 - v_235;
-			j_235 = u_235 + u0;
-
-			frm.at<Vec3b>(i, j)[0] = tmpFrm.at<Vec3b>(i_235, j_235)[0];
-			frm.at<Vec3b>(i, j)[1] = tmpFrm.at<Vec3b>(i_235, j_235)[1];
-			frm.at<Vec3b>(i, j)[2] = tmpFrm.at<Vec3b>(i_235, j_235)[2];
-		}
-	}
-
-}
-
 void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	//TODO: To apply different type of correction
 	CorrectingParams cp = CorrectingParams(
@@ -110,11 +58,39 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 	correctingUtil.doCorrect(src, dst, cp);
 }
 
-void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
-	stitchingUtil.doStitch(
-		srcs, dst, 
-		StitchingPolicy::STITCH_DOUBLE_SIDE, 
-		StitchingType::OPENCV_SELF_DEV);
+// Return value indicates whether curStitchingIdx in move forward
+bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
+	StitchingInfoGroup sInfoGIN;
+	StitchingInfoGroup sInfoGOUT;
+	pLSIG->addToWaitingBuff(frameIdx, srcs);
+	std::vector<Mat> vmat;
+	Mat dummy, tmpDst;
+	sInfoGOUT = stitchingUtil.doStitch(
+			srcs, dummy, 
+			sInfoGIN,
+			StitchingPolicy::STITCH_DOUBLE_SIDE, 
+			StitchingType::OPENCV_SELF_DEV);
+	pLSIG->push_back(sInfoGOUT);
+	int leftIdx, rightIdx;
+	calculateWind(curStitchingIdx, leftIdx, rightIdx);
+	if  (!pLSIG->cover(leftIdx, rightIdx)) {
+		LOG_WARN("StitchingBuff does not cover the need. Required:" <<leftIdx<<"-"<<rightIdx << ", current last:" << pLSIG->getEndIdx());
+		return false;
+	} else {
+		do {
+			bool b = pLSIG->getFromWaitingBuff(curStitchingIdx, vmat);
+			assert(b);
+			stitchingUtil.doStitch(
+				vmat, tmpDst, 
+				pLSIG->getAver(leftIdx, rightIdx),
+				StitchingPolicy::STITCH_DOUBLE_SIDE, 
+				StitchingType::OPENCV_SELF_DEV);
+			pLSIG->addToStitchedBuff(curStitchingIdx, tmpDst);
+			LOG_MESS("Done stitchig " << curStitchingIdx << " frame.")
+			calculateWind(++curStitchingIdx, leftIdx, rightIdx);
+		} while(pLSIG->cover(leftIdx, rightIdx));
+		return true;
+	}
 }
 
 void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
@@ -131,7 +107,7 @@ void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 void Processor::process(int maxSecondsCnt, int startFrame) {
 	std::vector<Mat> srcFrms(camCnt);
 	std::vector<Mat> dstFrms(camCnt);
-	int ttlFrmsCnt = fps*(maxSecondsCnt)+startFrame;
+	ttlFrmsCnt = fps*(maxSecondsCnt)+startFrame;
 	int fIndex = 0;
 	while (fIndex < startFrame) {
 		Mat tmp;
@@ -177,20 +153,26 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 				//resize(dstFrms[i], dstFrms[i], Size(1000,1000));
 			}
 			std::cout << "\tStitching ..." <<std::endl;
-			panoStitch(dstFrms, dstImage);
-			panoRefine(dstImage, dstImage);
-#ifdef SHOW_IMAGE
-			Mat forshow;
-			resize(dstImage, forshow, Size(1400, 700));
-			imshow("windows11",forshow);
-			cvWaitKey();
-#endif
+			panoStitch(dstFrms, fIndex);
+			auto buf = pLSIG->getStitchedBuff();
+			for (int dsti=0; dsti<buf->size(); ++dsti) {
+				auto p = buf->at(dsti);
+				int fidx = p.first;
+				dstImage = p.second;
+				panoRefine(dstImage, dstImage);
+	#ifdef SHOW_IMAGE
+				Mat forshow;
+				resize(dstImage, forshow, Size(1400, 700));
+				imshow("windows11",forshow);
+				cvWaitKey();
+	#endif
 			
-			std::string dstname;
-			GET_STR(OUTPUT_PATH << fIndex << ".jpg", dstname);
-			imwrite(dstname, dstImage);
+				std::string dstname;
+				GET_STR(OUTPUT_PATH << fidx << ".jpg", dstname);
+				imwrite(dstname, dstImage);
 
-			vWriter << dstImage;
+				vWriter << dstImage;
+			}
 		} catch (cv::Exception e) {
 			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: " <<e.what());
 		} catch (...) {

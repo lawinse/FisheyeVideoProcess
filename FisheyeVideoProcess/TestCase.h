@@ -25,7 +25,7 @@ public:
 		//srcs[1] = (srcs[1](Range(0, srcs[1].rows), Range(0,srcs[1].cols/2)).clone());
 
 		//srcs.push_back(srcs[0](Range(0, srcs[0].rows), Range(0,srcs[0].cols/2)).clone());
-		StitchingUtil().opencvSelfStitching(srcs, dst);
+		StitchingUtil().opencvSelfStitching(srcs, dst, StitchingInfo());
 		//srcs.clear();
 		//srcs.push_back(dst);
 		//srcs.push_back(imread(srcsName[0]));
@@ -43,7 +43,7 @@ public:
 	void test3() {
 		cv::Mat input = cv::imread(RESOURCE_PATH+(std::string)"result1.jpg");
 		Mat dst;
-		StitchingUtil::removeBlackPixel(input, dst);
+		StitchingUtil::removeBlackPixel(input, dst, StitchingInfo());
 		imshow("dst",dst);
 		cvWaitKey();
 	}
