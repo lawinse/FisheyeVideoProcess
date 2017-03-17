@@ -53,16 +53,19 @@ struct CorrectingParams {
 	}
 
 	int hashcode() {
-		int ret = ctype;
-		ret += 0x9e3779b9+(centerOfCircle.x<<6)+(centerOfCircle.x>>2);
-		ret += 0x9e3779b9+(centerOfCircle.y<<6)+(centerOfCircle.y>>2);
-		ret += 0x9e3779b9+(radiusOfCircle<<6)+(radiusOfCircle>>2);
-		ret += 0x9e3779b9+(dmType<<6)+(dmType>>2);
+		std::vector<int> v;
+		v.push_back(ctype);
+		v.push_back(centerOfCircle.x);
+		v.push_back(centerOfCircle.y);
+		v.push_back(radiusOfCircle);
+		v.push_back(dmType);
+		v.push_back(ctype);
 		if (ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD || ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED ) {
-			ret += ret += 0x9e3779b9+(((int)round(w.x*10000))<<6)+(((int)round(w.x*10000))>>2);
-			ret += 0x9e3779b9+(((int)round(w.y*10000))<<6)+(((int)round(w.y*10000))>>2);
+			v.push_back((int)round(w.x*10000));
+			v.push_back((int)round(w.y*10000));
 		}
-
+		int ret = 0;
+		for (auto i:v) ret += 0x9e3779b9+((std::hash<int>()(i))<<6)+((std::hash<int>()(i))>>2);
 		return ret;
 	}
 

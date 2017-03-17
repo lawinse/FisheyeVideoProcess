@@ -120,10 +120,12 @@ void Processor::panoStitch(std::vector<Mat> &srcs, Mat &dst) {
 void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	Mat tmp, tmp2;
 	tmp = srcImage.clone();
+	ImageUtil iu;
 	// USM
-	ImageUtil().USM(tmp,tmp2);
-	resize(tmp2, tmp2, dstPanoSize,0,0,INTER_LANCZOS4);
-	dstImage = tmp2.clone();
+	resize(tmp, tmp, dstPanoSize,0,0,INTER_LANCZOS4);
+	//iu.USM(tmp,tmp);
+	//iu.LaplaceEnhannce(tmp,tmp);
+	dstImage = tmp.clone();
 }
 
 void Processor::process(int maxSecondsCnt, int startFrame) {

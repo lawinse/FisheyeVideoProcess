@@ -96,6 +96,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="opencvSelfStitching.cpp" />
     <ClCompile Include="Processor.cpp" />
+    <ClCompile Include="StitchingInfo.cpp" />
     <ClCompile Include="StitchingUitl.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

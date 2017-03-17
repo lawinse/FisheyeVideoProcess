@@ -1,19 +1,22 @@
 #include "StitchingUtil.h"
 using namespace cv::detail;
-void StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio) {
-	Size maxSize = srcs[0].size();
+StitchingInfo StitchingUtil::opencvSelfStitching(const std::vector<Mat> &srcs, Mat &dstImage, std::pair<double, double> &maskRatio) {
+	Size minSize = srcs[0].size();
 	for (auto src:srcs) {
-		if (src.size().area() > maxSize.area()) maxSize = src.size();
+		if (src.size().area() < minSize.area()) minSize = src.size();
 	}
-	opencvSelfStitching(srcs,dstImage, maxSize , maskRatio);
+	return opencvSelfStitching(srcs,dstImage, minSize , maskRatio);
 }
 
-void StitchingUtil::opencvSelfStitching(
+StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,std::pair<double, double> &maskRatio) {
+	StitchingInfo sInfo;
+	int imgCnt = srcs.size(); 
+	
+	sInfo.imgCnt = imgCnt;
+	sInfo.maskRatio = maskRatio;
+	sInfo.resizeSz - resizeSz;
 
-
-
-	int imgCnt = srcs.size();
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
 	LOG_MESS("Finding features... with MaskRatio (" << maskRatio.first << "," << maskRatio.second <<")");
 
@@ -36,7 +39,7 @@ void StitchingUtil::opencvSelfStitching(
 		resize(full_img, img, Size(), work_scale, work_scale);
 		seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
 		seam_work_aspect = seam_scale / work_scale;
-		(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i==0, maskRatio));
+		(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i,imgCnt, maskRatio));
 		features[i].img_idx = i;
 		LOG_MESS("Features in image #" << i+1 << ": " << features[i].keypoints.size());
 		resize(full_img, img, Size(), seam_scale, seam_scale);
@@ -94,6 +97,7 @@ void StitchingUtil::opencvSelfStitching(
 	for (size_t i = 0; i < cameras.size(); ++i)
 		cameras[i].R = rmats[i];
 
+	sInfo.cameras = cameras;
 
 	LOG_MESS("Warping images ... ");
 
@@ -171,6 +175,7 @@ void StitchingUtil::opencvSelfStitching(
 			cameras[i].ppx *= compose_work_aspect;
 			cameras[i].ppy *= compose_work_aspect;
 
+
 			Size sz = full_img_sizes[i];
 			if (std::abs(compose_scale - 1) > 1e-1) {
 				sz.width = round(full_img_sizes[i].width * compose_scale);
@@ -224,15 +229,18 @@ void StitchingUtil::opencvSelfStitching(
 			}
 
 			blender->prepare(corners, sizes);
+
 		}
 
 		blender->feed(img_warped_s, mask_warped, corners[img_idx]);
 	}
 
+	sInfo.setRanges(corners, sizes);
+
 	Mat result, result_mask, tmp;
 	blender->blend(result, result_mask);
 	result.convertTo(tmp, CV_8UC3);
-	removeBlackPixel(tmp, dstImage);
+	removeBlackPixel(tmp, dstImage, sInfo);
 	LOG_MESS("Size of Pano:" << dstImage.size());
-	return;
+	return sInfo;
 }

@@ -14,7 +14,7 @@ public:
 		vector<Mat> srcs;
 		Mat dst;
 		int srcsCnt = 2;
-		string srcsName[] = {RESOURCE_PATH + (string)"resultll.jpg", RESOURCE_PATH + (string)"resultrr.jpg"};
+		string srcsName[] = {RESOURCE_PATH + (string)"dstL.jpg", RESOURCE_PATH + (string)"dstR.jpg"};
 		string dstName = RESOURCE_PATH + (string)"result123.jpg";
 
 		for (int i=0; i<srcsCnt; ++i) {
@@ -25,7 +25,7 @@ public:
 		//srcs[1] = (srcs[1](Range(0, srcs[1].rows), Range(0,srcs[1].cols/2)).clone());
 
 		//srcs.push_back(srcs[0](Range(0, srcs[0].rows), Range(0,srcs[0].cols/2)).clone());
-		StitchingUtil().opencvSelfStitching(srcs, dst, Size(800,700));
+		StitchingUtil().opencvSelfStitching(srcs, dst);
 		//srcs.clear();
 		//srcs.push_back(dst);
 		//srcs.push_back(imread(srcsName[0]));
