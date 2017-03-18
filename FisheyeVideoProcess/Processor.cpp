@@ -62,33 +62,46 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 	StitchingInfoGroup sInfoGIN;
 	StitchingInfoGroup sInfoGOUT;
+
+	StitchingPolicy sp = StitchingPolicy::STITCH_DOUBLE_SIDE;
+	StitchingType sType = StitchingType::OPENCV_SELF_DEV;
+
 	pLSIG->addToWaitingBuff(frameIdx, srcs);
 	std::vector<Mat> vmat;
 	Mat dummy, tmpDst;
-	sInfoGOUT = stitchingUtil.doStitch(
-			srcs, dummy, 
-			sInfoGIN,
-			StitchingPolicy::STITCH_DOUBLE_SIDE, 
-			StitchingType::OPENCV_SELF_DEV);
-	pLSIG->push_back(sInfoGOUT);
+	try {
+		sInfoGOUT = stitchingUtil.doStitch(
+				srcs, dummy, 
+				sInfoGIN,
+				sp,
+				sType);
+		pLSIG->push_back(sInfoGOUT);
+	} catch(cv::Exception e) {
+		pLSIG->push_back(sInfoGOUT);
+		throw e;
+	}
+
 	int leftIdx, rightIdx;
 	calculateWind(curStitchingIdx, leftIdx, rightIdx);
 	if  (!pLSIG->cover(leftIdx, rightIdx)) {
 		LOG_WARN("StitchingBuff does not cover the need. Required:" <<leftIdx<<"-"<<rightIdx << ", current last:" << pLSIG->getEndIdx());
 		return false;
 	} else {
+		std::vector<int> selFrame;
 		do {
 			bool b = pLSIG->getFromWaitingBuff(curStitchingIdx, vmat);
 			assert(b);
+			sInfoGIN = pLSIG->getAver(leftIdx, rightIdx, selFrame);
+			LOG_MESS("Stitching "<< curStitchingIdx << " frame using " <<vec2str(selFrame) << "frames.");
 			stitchingUtil.doStitch(
 				vmat, tmpDst, 
-				pLSIG->getAver(leftIdx, rightIdx),
-				StitchingPolicy::STITCH_DOUBLE_SIDE, 
-				StitchingType::OPENCV_SELF_DEV);
+				sInfoGIN,
+				sp,
+				sType);
 			pLSIG->addToStitchedBuff(curStitchingIdx, tmpDst);
 			LOG_MESS("Done stitchig " << curStitchingIdx << " frame.")
 			calculateWind(++curStitchingIdx, leftIdx, rightIdx);
-		} while(pLSIG->cover(leftIdx, rightIdx));
+		} while(curStitchingIdx<ttlFrmsCnt && pLSIG->cover(leftIdx, rightIdx));
 		return true;
 	}
 }
@@ -98,8 +111,8 @@ void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	tmp = srcImage.clone();
 	ImageUtil iu;
 	// USM
-	resize(tmp, tmp, dstPanoSize,0,0,INTER_LANCZOS4);
-	//iu.USM(tmp,tmp);
+	_resize_(tmp, tmp, dstPanoSize,0,0);
+	iu.USM(tmp,tmp);
 	//iu.LaplaceEnhannce(tmp,tmp);
 	dstImage = tmp.clone();
 }
@@ -119,7 +132,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 
 	while (fIndex < ttlFrmsCnt) {
 		// frame by frame
-		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt << " frame ...");
+		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt-1 << " frame ...");
 		try {
 			std::vector<Mat> tmpFrms(camCnt);
 			Mat dstImage;
@@ -150,7 +163,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			std::cout << "\tCorrecting ..." <<std::endl;
 			for (int i=0; i<camCnt; ++i) {
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
-				//resize(dstFrms[i], dstFrms[i], Size(1000,1000));
+				//_resize_(dstFrms[i], dstFrms[i], Size(1000,1000));
 			}
 			std::cout << "\tStitching ..." <<std::endl;
 			panoStitch(dstFrms, fIndex);
@@ -162,7 +175,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 				panoRefine(dstImage, dstImage);
 	#ifdef SHOW_IMAGE
 				Mat forshow;
-				resize(dstImage, forshow, Size(1400, 700));
+				_resize_(dstImage, forshow, Size(1400, 700));
 				imshow("windows11",forshow);
 				cvWaitKey();
 	#endif
@@ -173,6 +186,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 
 				vWriter << dstImage;
 			}
+			pLSIG->clearStitchedBuff();
 		} catch (cv::Exception e) {
 			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: " <<e.what());
 		} catch (...) {

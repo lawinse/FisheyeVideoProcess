@@ -1,14 +1,15 @@
 #include "StitchingUtil.h"
+#include "_matchers.h"
 using namespace cv::detail;
 StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, StitchingInfo &sInfo, std::pair<double, double> &maskRatio) {
-		Size minSize = srcs[0].size();
+		Size sz = srcs[0].size();
 		if (sInfo.isNull()) {
 			for (auto src:srcs) {
-				if (src.size().area() < minSize.area()) minSize = src.size();
+				if (src.size().area() < sz.area()) sz = src.size();
 			}
 		}
-		return opencvSelfStitching(srcs,dstImage, minSize, sInfo, maskRatio);
+		return opencvSelfStitching(srcs,dstImage, sz, sInfo, maskRatio);
 }
 
 StitchingInfo StitchingUtil::opencvSelfStitching(
@@ -34,20 +35,21 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		sInfo.warpedImageScale = warped_image_scale = sInfoNotNull.warpedImageScale;
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
+			//LOG_WARN("Orig Size:" << full_img1.size());
 			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
-			resize(full_img1,full_img, sInfo.resizeSz);
+			_resize_(full_img1,full_img, sInfo.resizeSz,0,0);
 			full_img_sizes[i] = full_img.size();
 			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
-			resize(full_img, img, Size(), work_scale, work_scale);
+			_resize_(full_img, img, Size(), work_scale, work_scale);
 			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
 			seam_work_aspect = seam_scale / work_scale;
-			resize(full_img, img, Size(), seam_scale, seam_scale);
+			_resize_(full_img, img, Size(), seam_scale, seam_scale);
 			images[i] = img.clone();
 		}
 
 	} else {
 		Ptr<FeaturesFinder> finder;
-		finder = new SurfFeaturesFinder();
+		finder = new SIFTFeaturesFinder();
 		std::vector<ImageFeatures> features(imgCnt);
 		
 		sInfo.imgCnt = imgCnt;
@@ -56,21 +58,25 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		LOG_MESS("Finding features... with MaskRatio (" << sInfo.maskRatio.first << "," << sInfo.maskRatio.second <<")");
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
+			//LOG_WARN("Orig Size:" << full_img1.size());
 			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
-			resize(full_img1,full_img, sInfo.resizeSz);
+			_resize_(full_img1,full_img, sInfo.resizeSz, 0,0);
 			full_img_sizes[i] = full_img.size();
 			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
 
-			resize(full_img, img, Size(), work_scale, work_scale);
+			_resize_(full_img, img, Size(), work_scale, work_scale);
 			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
 			seam_work_aspect = seam_scale / work_scale;
 			(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i,imgCnt, sInfo.maskRatio));
+			//LOG_MESS(features[i].keypoints[0].pt.x << "," <<features[i].keypoints[0].pt.y);
+			//LOG_MESS(features[i].keypoints[1].pt.x << "," <<features[i].keypoints[1].pt.y);system("pause");
 			features[i].img_idx = i;
 			LOG_MESS("Features in image #" << i+1 << ": " << features[i].keypoints.size());
-			resize(full_img, img, Size(), seam_scale, seam_scale);
+			_resize_(full_img, img, Size(), seam_scale, seam_scale);
 			images[i] = img.clone();
 		}
-
+		
+		
 		finder->collectGarbage();
 		full_img.release();
 		img.release();
@@ -114,16 +120,25 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		sort(focals.begin(), focals.end());
 		warped_image_scale =(focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
 
+		std::vector<Mat> rmats;
+		for (size_t i = 0; i < cameras.size(); ++i)
+			rmats.push_back(cameras[i].R);
+		waveCorrect(rmats, osParam.wave_correct);
+		for (size_t i = 0; i < cameras.size(); ++i)
+			cameras[i].R = rmats[i];
+
 		sInfo.cameras = cameras;
 		sInfo.warpedImageScale = warped_image_scale;
+		if (cameras.size() == 2) {
+			double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
+			if (relative_focal_ratio < ERR) {
+				LOG_ERR("Terrible cam estimation.")
+				return sInfo;
+			}
+			
+		}
 	}
-
-	std::vector<Mat> rmats;
-	for (size_t i = 0; i < cameras.size(); ++i)
-		rmats.push_back(cameras[i].R);
-	waveCorrect(rmats, osParam.wave_correct);
-	for (size_t i = 0; i < cameras.size(); ++i)
-		cameras[i].R = rmats[i];
+	
 
 	LOG_MESS("Warping images ... ");
 
@@ -189,7 +204,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		// reCalculate corner and mask since the former estimation is based on work_scale
 		
 		full_img1 = srcs[img_idx].clone();
-		resize(full_img1,full_img, sInfo.resizeSz);
+		_resize_(full_img1,full_img, sInfo.resizeSz, 0,0);
 		compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
 		compose_work_aspect = compose_scale / work_scale;
 		warped_image_scale *= static_cast<float>(compose_work_aspect);
@@ -216,7 +231,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		}
 	
 		if (abs(compose_scale - 1) > 1e-1)
-			resize(full_img, img, Size(), compose_scale, compose_scale);
+			_resize_(full_img, img, Size(), compose_scale, compose_scale);
 		else
 			img = full_img;
 		full_img.release();
@@ -236,7 +251,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		mask.release();
 
 		dilate(masks_warped[img_idx], dilated_mask, Mat());
-		resize(dilated_mask, seam_mask, mask_warped.size());
+		_resize_(dilated_mask, seam_mask, mask_warped.size(),0,0);
 		mask_warped = seam_mask & mask_warped;
 		if (blender.empty()) {
 			blender = Blender::createDefault(osParam.blend_type, false);

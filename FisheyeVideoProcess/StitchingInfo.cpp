@@ -6,7 +6,7 @@ void StitchingInfo::clear() {
 	cameras.clear();
 }
 
-bool StitchingInfo::isNull() {
+bool StitchingInfo::isNull() const{
 	return imgCnt == 0;
 }
 
@@ -60,6 +60,7 @@ std::ostream& operator <<(std::ostream& out, const StitchingInfo& sInfo) {
 }
 
 bool StitchingInfo::isSuccess() const {
+	if (isNull()) return false;
 	if (cameras.size() == 2) {
 		double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
 		return relative_focal_ratio >= ERR && relative_focal_ratio < 0.1 && nonBlackRatio >= NONBLACK_REMAIN_FLOOR;
@@ -92,20 +93,21 @@ double StitchingInfo::evaluate(const StitchingInfoGroup &group) {
 
 
 int LocalStitchingInfoGroup::push_back(StitchingInfoGroup g) {
-	if (endIdx-startIdx<=wSize) {
+	if (endIdx-startIdx<=wSize*2) {
 		groups[endIdx] = std::make_pair(g, StitchingInfo::evaluate(g));
 		endIdx++;
 	} else {
 		groups[endIdx] = std::make_pair(g, StitchingInfo::evaluate(g));
-		groups.erase(startIdx);
 		endIdx++;
 		startIdx++;
 	}
-	LOG_ERR(StitchingInfo::evaluate(g));
+	if (groups.size()>=wSize*4)
+		for (int i=endIdx-wSize*4; i<startIdx; ++i)
+			groups.erase(i);
 	return startIdx;
 }
 
-StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail) {
+StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vector<int> &selectedFrameIdx) {
 	std::vector<std::pair<int,double>> tmp(tail-head);
 	for (int i=0; i<tmp.size(); ++i) {tmp[i] = std::make_pair(head + i, groups[head+i].second);}
 	std::sort(tmp.begin(), tmp.end(),
@@ -113,6 +115,8 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail) {
 	int r = LSIG_BEST_NUM-1;
 	for (;r>=0 && tmp[r].second == 0;--r);
 	if (r < 0) {LOG_ERR("The local stitching info is entirely bad.");}
+	selectedFrameIdx.clear();
+	for (int i=0; i<=r; ++i) selectedFrameIdx.push_back(tmp[r].first);
 
 #define GET_GROUP(i) (groups[tmp[(i)].first].first)
 	StitchingInfoGroup ret(GET_GROUP(0).size());
@@ -147,7 +151,6 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail) {
 			}
 
 		}
-		LOG_WARN("Averaging StitchingInfoGroup...")
 		ret[j].resizeSz.width /= (r+1);
 		ret[j].resizeSz.height /= (r+1);
 		ret[j].warpedImageScale /= (r+1);
@@ -171,6 +174,7 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 		tmpV.push_back(m.clone());
 	}
 	stitchingWaitingBuff[fidx] = tmpV;
-	if (stitchingWaitingBuff.size() > wSize*2) 
-		stitchingWaitingBuff.erase(fidx-wSize);
+	if (stitchingWaitingBuff.size() > wSize*4)
+		for (int i=fidx-wSize*4; i<=fidx-wSize*2; ++i)
+			stitchingWaitingBuff.erase(i);
 }
