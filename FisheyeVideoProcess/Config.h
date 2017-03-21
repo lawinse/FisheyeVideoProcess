@@ -44,7 +44,7 @@ inline double square(const double a) {return pow(a,2);}
 	}
 
 template<typename T> 
-std::string vec2str(std::vector<T> & v) {
+std::string vec2str(const std::vector<T> & v) {
 	std::stringstream ss;
 	ss << "{";
 	for (auto i:v) {ss << i << ", ";}
@@ -57,4 +57,8 @@ inline void _resize_(InputArray src, OutputArray dst, Size dsize, double fx = 0,
 		? cv::resize(src, dst, dsize, fx, fy, CV_INTER_AREA)
 		: cv::resize(src, dst, dsize, fx, fy, CV_INTER_CUBIC);
 
+}
+
+inline bool _cmp_p2f(const cv::Point2f &a, const cv::Point2f &b) {
+	return a.x == b.x ? a.y < b.y : a.x < b.x;
 }

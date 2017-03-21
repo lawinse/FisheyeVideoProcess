@@ -83,7 +83,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="_matchers.h" />
+    <ClInclude Include="Supplements\RewarpableWarper.h" />
+    <ClInclude Include="Supplements\Matchers.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="CorrectingUtil.h" />
     <ClInclude Include="ImageUtil.h" />
@@ -93,7 +94,8 @@
     <ClInclude Include="TestCase.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="_matchers.cpp" />
+    <ClCompile Include="Supplements\RewarpableWarper.cpp" />
+    <ClCompile Include="Supplements\Matchers.cpp" />
     <ClCompile Include="CorrectingUtil.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="opencvSelfStitching.cpp" />

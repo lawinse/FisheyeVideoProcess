@@ -63,6 +63,45 @@ struct OpenCVStitchParam {
 		}
 };
 
+
+struct VecOfVecAverageHelper {
+	typedef std::vector<std::vector<float>> Vec2Vecf;
+	
+	Vec2Vecf data;
+	Vec2Vecf averValue;
+	int cnt;
+
+	VecOfVecAverageHelper():cnt(0){
+	};
+ 
+	Vec2Vecf getAver(bool reset = true) {
+		if (!data.empty()){
+			averValue = Vec2Vecf(data.size());
+			for (int i=0; i<data.size(); ++i) averValue[i].assign(data[i].begin(), data[i].end());
+			for (int i=0; i<averValue.size(); ++i)
+				for (int j=0; j<averValue[i].size(); ++j) 
+					averValue[i][j]/=double(cnt);
+			if (reset) data.clear(), cnt = 0;
+		}
+		return averValue;
+	}
+
+	void addData(Vec2Vecf& _data) {
+		if (data.empty()) {
+			data = Vec2Vecf(_data.size());
+			for (int i=0; i<data.size(); ++i) data[i].assign(_data[i].begin(), _data[i].end());
+		} else {
+			assert(data.size() == _data.size());
+			for (int i=0; i<data.size(); ++i) {
+				assert(data[i].size() == _data[i].size());
+				for (int j = 0; j<data[i].size(); ++j)
+					data[i][j] += _data[i][j];
+			}
+		}
+		++cnt;
+	}
+};
+
 class StitchingInfo;
 typedef std::vector<StitchingInfo> StitchingInfoGroup;
 
@@ -70,28 +109,35 @@ class StitchingInfo {
 public:
 	int imgCnt;
 	double nonBlackRatio;
-	float warpedImageScale;
+	//float warpedImageScale;
 	Size resizeSz;
 	
 	std::pair<double, double> maskRatio;
 	std::vector<Range> ranges;	// only cares width-wise
 	std::vector<cv::detail::CameraParams> cameras;
+	std::vector<std::vector<float>> warpData;
 
 	StitchingInfo(){clear();}
 	StitchingInfo(const StitchingInfo &sinfo){
 		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
-		warpedImageScale = sinfo.warpedImageScale, resizeSz = sinfo.resizeSz;
+		resizeSz = sinfo.resizeSz;
 		maskRatio = sinfo.maskRatio;
 		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
 		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
+		warpData = std::vector<std::vector<float>>(sinfo.warpData.size());
+		for (int i=0; i<warpData.size(); ++i)
+			warpData[i].assign(sinfo.warpData[i].begin(), sinfo.warpData[i].end());
 	}
 	StitchingInfo &StitchingInfo::operator = (const StitchingInfo &sinfo) {
 		if (this == &sinfo) return *this;
 		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
-		warpedImageScale = sinfo.warpedImageScale, resizeSz = sinfo.resizeSz;
+		resizeSz = sinfo.resizeSz;
 		maskRatio = sinfo.maskRatio;
 		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
 		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
+		warpData = std::vector<std::vector<float>>(sinfo.warpData.size());
+		for (int i=0; i<warpData.size(); ++i)
+			warpData[i].assign(sinfo.warpData[i].begin(), sinfo.warpData[i].end());
 		return *this;
 	}
 
@@ -102,6 +148,18 @@ public:
 	void setRanges(const Range &fullImgeRange);
 	bool isSuccess() const;
 	double evaluate() const;
+	double getWarpScale() const;
+	bool setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
+	void setFromCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
+	float getLastScale() const {return warpData[warpData.size()-1][0];}
+	float getAverFocal() const {
+		std::vector<double> focals;
+		for (size_t i = 0; i < cameras.size(); ++i) {
+			focals.push_back(cameras[i].focal);
+		}
+		sort(focals.begin(), focals.end());
+		return (focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
+	}
 
 	static bool isSuccess(const StitchingInfoGroup &);
 	static double evaluate(const StitchingInfoGroup &);
@@ -109,7 +167,7 @@ public:
 
 class LocalStitchingInfoGroup {
 	#define LSIG_WINDOW_SIZE 10
-	#define LSIG_BEST_NUM 1
+	#define LSIG_BEST_NUM 7
 	int wSize;
 	int startIdx, endIdx;
 	std::unordered_map<int, std::pair<StitchingInfoGroup,double>> groups;
@@ -154,7 +212,7 @@ private:
 	#define OVERLAP_RATIO_DOUBLESIDE 0.25
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
 	#define BLACK_TOLERANCE 3
-	#define NONBLACK_REMAIN_FLOOR 0.75
+	#define NONBLACK_REMAIN_FLOOR 0.70
 
 	
 	#define FIX_RESIZE_0 Size(1440,1440)
@@ -191,8 +249,6 @@ private:
 
 	void unzipMatchedPair(std::vector<std::pair<Point2f, Point2f>> &, std::vector<Point2f> &, std::vector<Point2f> &);
 	void getGrayScaleAndFiltered(const std::vector<Mat> &, std::vector<Mat> &);
-	static bool _cmp_p2f(const Point2f &a, const Point2f &b);
-	static bool _cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b);
 
 	StitchingInfo _stitch(
 		const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType,StitchingInfo &sInfoNotNull, const Size resizeSz = Size(), std::pair<double, double> &ratio=defaultMaskRatio );

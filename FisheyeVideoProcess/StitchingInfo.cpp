@@ -50,9 +50,13 @@ std::ostream& operator <<(std::ostream& out, const StitchingInfo& sInfo) {
 	out << " imgCnt: " << sInfo.imgCnt << "\n";
 	out << " resizeSz: " <<sInfo.resizeSz << "\n";
 	out << " nonBlackRatio: " << sInfo.nonBlackRatio << "\n";
-	for (int i=0; i<sInfo.cameras.size(); ++i) {
-		out << " Camera #" << i+1 << ":\n" << sInfo.cameras[i].K()<<"\n";
-		out <<  "Range #" << i+1 << ":" << sInfo.ranges[i].start << "," << sInfo.ranges[i].end << "\n";
+	//for (int i=0; i<sInfo.cameras.size(); ++i) {
+	//	out << " Camera #" << i+1 << ":\n" << sInfo.cameras[i].K()<<"\n";
+	//	out <<  "Range #" << i+1 << ":" << sInfo.ranges[i].start << "," << sInfo.ranges[i].end << "\n";
+	//}
+	out << "warpData:\n" << "\n";
+	for (int i=0; i<sInfo.warpData.size(); ++i) {
+		out << vec2str(sInfo.warpData[i]) << "\n";
 	}
 	/*out << (sInfo.cameras[1].focal-sInfo.cameras[0].focal)*1.0/sInfo.cameras[0].focal<<"\n";*/
 	out << "<\\STITCHING_INFO>" << std::endl;
@@ -115,20 +119,46 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	int r = LSIG_BEST_NUM-1;
 	for (;r>=0 && tmp[r].second == 0;--r);
 	if (r < 0) {LOG_ERR("The local stitching info is entirely bad.");}
-	selectedFrameIdx.clear();
-	for (int i=0; i<=r; ++i) selectedFrameIdx.push_back(tmp[r].first);
+	++r;
 
-#define GET_GROUP(i) (groups[tmp[(i)].first].first)
+#define GET_GROUP(i) (groups[tmp[i].first].first)
+	// Using the middle scale ones
+	if (r > 3) {
+		for (int i=0; i<r; ++i) {
+			if (GET_GROUP(i).size() == 4) {
+				tmp[i].second = 
+					//(GET_GROUP(i)[0].getLastScale()+GET_GROUP(i)[0].getLastScale())*GET_GROUP(i)[2].getLastScale()*GET_GROUP(i)[3].getLastScale();
+					(GET_GROUP(i)[0].getAverFocal()+GET_GROUP(i)[1].getAverFocal())*GET_GROUP(i)[2].getAverFocal()*GET_GROUP(i)[3].getAverFocal();
+			}
+		}
+		std::sort(tmp.begin(), tmp.begin()+r,
+			[](const std::pair<int,double> &a, const std::pair<int,double> &b) {return a.second<b.second;});
+		tmp.assign(tmp.begin()+r/2-1, tmp.begin()+r/2+1);
+		r = tmp.size();
+	}
+
+
+	selectedFrameIdx.clear();
+	for (int i=0; i<r; ++i) selectedFrameIdx.push_back(tmp[i].first);
+
+
 	StitchingInfoGroup ret(GET_GROUP(0).size());
+	
+
 	for (int j=0; j<ret.size(); ++j) {
 		ret[j].imgCnt = GET_GROUP(0)[j].imgCnt;
 		ret[j].maskRatio = GET_GROUP(0)[j].maskRatio;
 		ret[j].cameras = std::vector<cv::detail::CameraParams>(GET_GROUP(0)[j].cameras.size());
+		VecOfVecAverageHelper averhelper;
 		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-			ret[j].cameras[camidx].R = Mat::zeros(3,3,CV_32F);
-			ret[j].cameras[camidx].t = Mat::zeros(3,1,CV_64F);
+			ret[j].cameras[camidx].aspect = 0;
+			ret[j].cameras[camidx].focal = 0;
+			ret[j].cameras[camidx].ppx = 0;
+			ret[j].cameras[camidx].ppy = 0;
+			ret[j].cameras[camidx].R = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].R.size(), GET_GROUP(0)[j].cameras[camidx].R.type());
+			ret[j].cameras[camidx].t = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].t.size(),GET_GROUP(0)[j].cameras[camidx].t.type());
 		}
-		for (int i=0; i<=r; ++i) {
+		for (int i=0; i<r; ++i) {
 			/*
 			* float warpedImageScale;
 			* Size resizeSz;
@@ -136,12 +166,12 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 			*/
 			ret[j].resizeSz.width += GET_GROUP(i)[j].resizeSz.width;
 			ret[j].resizeSz.height += GET_GROUP(i)[j].resizeSz.height;
-
-			ret[j].warpedImageScale += GET_GROUP(i)[j].warpedImageScale;
+			averhelper.addData(GET_GROUP(i)[j].warpData);
 
 			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
 				ret[j].cameras[camidx].focal += GET_GROUP(i)[j].cameras[camidx].focal;
 				ret[j].cameras[camidx].aspect += GET_GROUP(i)[j].cameras[camidx].aspect;
+				
 				ret[j].cameras[camidx].ppx += GET_GROUP(i)[j].cameras[camidx].ppx;
 				ret[j].cameras[camidx].ppy += GET_GROUP(i)[j].cameras[camidx].ppy;
 				//LOG_ERR(ret[j].cameras[camidx].R.type() << " " << GET_GROUP(i)[j].cameras[camidx].R.type());
@@ -151,17 +181,22 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 			}
 
 		}
-		ret[j].resizeSz.width /= (r+1);
-		ret[j].resizeSz.height /= (r+1);
-		ret[j].warpedImageScale /= (r+1);
+		ret[j].resizeSz.width /= r;
+		ret[j].resizeSz.height /= r;
 		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-			ret[j].cameras[camidx].focal /= (r+1);
-			ret[j].cameras[camidx].aspect /= (r+1);
-			ret[j].cameras[camidx].ppx /= (r+1);
-			ret[j].cameras[camidx].ppy /= (r+1);
-			ret[j].cameras[camidx].R /= double(r+1);
-			ret[j].cameras[camidx].t /= double(r+1);
+			ret[j].cameras[camidx].focal /= r;
+			ret[j].cameras[camidx].aspect /= r;
+			ret[j].cameras[camidx].ppx /= r;
+			ret[j].cameras[camidx].ppy /= r;
+			ret[j].cameras[camidx].R /= double(r);
+			ret[j].cameras[camidx].t /= double(r);
 		}
+		ret[j].warpData = averhelper.getAver();
+		//for (int i=0; i<ret[j].warpData.size(); ++i) {
+		//	LOG_MESS(vec2str(ret[j].warpData[i]));
+		//}
+		//LOG_MESS("at getAver()");
+		//system("pause");
 	}
 
 	return ret;
@@ -177,4 +212,40 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 	if (stitchingWaitingBuff.size() > wSize*4)
 		for (int i=fidx-wSize*4; i<=fidx-wSize*2; ++i)
 			stitchingWaitingBuff.erase(i);
+}
+
+bool StitchingInfo::setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &_cameras) {
+	if (_cameras.size() != 0) {LOG_WARN("cameraParams are not null !"); return false;}
+	_cameras.assign(cameras.size(), cv::detail::CameraParams());
+	for (int i=0; i<cameras.size(); ++i) {
+		_cameras[i].focal = cameras[i].focal;
+		_cameras[i].aspect = cameras[i].aspect;
+		_cameras[i].ppx = cameras[i].ppx;
+		_cameras[i].ppy = cameras[i].ppy;
+		_cameras[i].R = cameras[i].R.clone();
+		_cameras[i].t = cameras[i].t.clone();
+	}
+
+	return true;
+}
+
+void StitchingInfo::setFromCamerasInternalParam(std::vector<cv::detail::CameraParams> &_cameras) {
+	cameras.assign(_cameras.size(), cv::detail::CameraParams());
+	for (int i=0; i<cameras.size(); ++i) {
+		cameras[i].focal = _cameras[i].focal;
+		cameras[i].aspect = _cameras[i].aspect;
+		cameras[i].ppx = _cameras[i].ppx;
+		cameras[i].ppy = _cameras[i].ppy;
+		cameras[i].R = _cameras[i].R.clone();
+		cameras[i].t = _cameras[i].t.clone();
+	}
+}
+
+double StitchingInfo::getWarpScale() const {
+	std::vector<double> focals;
+	for (int i = 0; i < cameras.size(); ++i) {
+		focals.push_back(cameras[i].focal);
+	}
+	sort(focals.begin(), focals.end());
+	return (focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
 }

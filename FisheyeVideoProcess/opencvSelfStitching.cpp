@@ -1,5 +1,7 @@
 #include "StitchingUtil.h"
-#include "_matchers.h"
+#include "Supplements\Matchers.h"
+#include "Supplements\RewarpableWarper.h"
+
 using namespace cv::detail;
 StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, StitchingInfo &sInfo, std::pair<double, double> &maskRatio) {
@@ -25,14 +27,18 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	std::vector<Mat> images(imgCnt);
 	std::vector<Size> full_img_sizes(imgCnt);
 
+	Ptr<FeaturesFinder> finder;
+	finder = new supp::SIFTFeaturesFinder();
+	std::vector<ImageFeatures> features(imgCnt);
+	std::vector<MatchesInfo> pairwise_matches;
+	HomographyBasedEstimator estimator;
+
 
 	if (!sInfoNotNull.isNull()) {
 		assert(imgCnt == sInfoNotNull.imgCnt);
 		sInfo.imgCnt = sInfoNotNull.imgCnt;
 		sInfo.maskRatio = sInfoNotNull.maskRatio;
 		sInfo.resizeSz = sInfoNotNull.resizeSz;
-		sInfo.cameras = cameras = sInfoNotNull.cameras;
-		sInfo.warpedImageScale = warped_image_scale = sInfoNotNull.warpedImageScale;
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
 			//LOG_WARN("Orig Size:" << full_img1.size());
@@ -46,11 +52,11 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			_resize_(full_img, img, Size(), seam_scale, seam_scale);
 			images[i] = img.clone();
 		}
+		sInfoNotNull.setToCamerasInternalParam(cameras);
+		warped_image_scale = sInfoNotNull.getWarpScale();
 
 	} else {
-		Ptr<FeaturesFinder> finder;
-		finder = new SIFTFeaturesFinder();
-		std::vector<ImageFeatures> features(imgCnt);
+
 		
 		sInfo.imgCnt = imgCnt;
 		sInfo.maskRatio = maskRatio;
@@ -82,19 +88,21 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		img.release();
 
 		LOG_MESS("Pairwise matching ...");
-		std::vector<MatchesInfo> pairwise_matches;
 		BestOf2NearestMatcher matcher(false, osParam.match_conf);
 		matcher(features, pairwise_matches); 
 		matcher.collectGarbage();
-
-		HomographyBasedEstimator estimator;
+		estimator = HomographyBasedEstimator(false);
 		estimator(features, pairwise_matches, cameras);
-
+	
+	
 		for (size_t i = 0; i < cameras.size(); ++i) {
 			Mat R;
 			cameras[i].R.convertTo(R, CV_32F);
 			cameras[i].R = R;
 			LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << cameras[i].K());
+			LOG_MESS("Initial intrinsics R #" << i+1 << ":\n" << cameras[i].R);
+			LOG_MESS("Initial intrinsics t #" << i+1 << ":\n" << cameras[i].t);
+			//system("pause");
 		}
 
 		Ptr<detail::BundleAdjusterBase> adjuster;
@@ -126,19 +134,18 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		waveCorrect(rmats, osParam.wave_correct);
 		for (size_t i = 0; i < cameras.size(); ++i)
 			cameras[i].R = rmats[i];
-
-		sInfo.cameras = cameras;
-		sInfo.warpedImageScale = warped_image_scale;
-		if (cameras.size() == 2) {
-			double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
-			if (relative_focal_ratio < ERR) {
-				LOG_ERR("Terrible cam estimation.")
-				return sInfo;
-			}
-			
-		}
+		
 	}
 	
+	sInfo.setFromCamerasInternalParam(cameras);
+	if (cameras.size() == 2) {
+		double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
+		if (relative_focal_ratio < ERR) {
+			LOG_ERR("Terrible cam estimation.")
+			return sInfo;
+		}
+			
+	}
 
 	LOG_MESS("Warping images ... ");
 
@@ -155,10 +162,16 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		//masks[i] = getMask(images[i],i==0);
 	}
 
-	Ptr<WarperCreator> warper_creator;
-	warper_creator = new cv::SphericalWarper();			//TOSOLVE: Not sure
+	/**
+	* Spherical is nearly deprecated
+	* Merator is slower but better than Cylindrical
+	*/
 
-	Ptr<RotationWarper> warper = warper_creator->create(static_cast<float>(warped_image_scale * seam_work_aspect));
+	//supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
+	supp::RewarpableCylindricalWarper* warper = new supp::RewarpableCylindricalWarper(warped_image_scale * seam_work_aspect);
+
+	if (!sInfoNotNull.isNull())
+		warper->setProjectorData(sInfoNotNull.warpData);
 
 	for (int i = 0; i < imgCnt; ++i) {
 		Mat_<float> K;
@@ -192,7 +205,6 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 
 	LOG_MESS("Compositing...");
 
-
 	Mat img_warped, img_warped_s;
 	Mat dilated_mask, seam_mask, mask, mask_warped;
 	Ptr<Blender> blender;
@@ -208,7 +220,8 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
 		compose_work_aspect = compose_scale / work_scale;
 		warped_image_scale *= static_cast<float>(compose_work_aspect);
-		warper = warper_creator->create(warped_image_scale);
+		//warper = warper_creator->create(warped_image_scale);
+		warper->setScale(warped_image_scale);
 
 		// Update
 		for (int i = 0; i < imgCnt; ++i) {
@@ -274,8 +287,10 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		}
 
 		blender->feed(img_warped_s, mask_warped, corners[img_idx]);
+
 	}
 
+	sInfo.warpData = (warper)->getProjectorAllData();
 	sInfo.setRanges(corners, sizes);
 
 	Mat result, result_mask, tmp;
@@ -283,5 +298,6 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	result.convertTo(tmp, CV_8UC3);
 	removeBlackPixel(tmp, dstImage, sInfo);
 	LOG_MESS("Size of Pano:" << dstImage.size());
+	if (warper != NULL) delete warper;
 	return sInfo;
 }

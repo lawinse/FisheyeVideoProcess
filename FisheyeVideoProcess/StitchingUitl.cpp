@@ -157,7 +157,9 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 
 
 	// Remove duplicate keypoints
-	sort(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end(), _cmp_pp2f);
+	sort(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end(), 
+		[](const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b){
+			return a.first == b.first ? _cmp_p2f(a.second, b.second) : _cmp_p2f(a.first, b.first);});
 	matchPointPairsLRAll.erase(
 		std::unique(matchPointPairsLRAll.begin(), matchPointPairsLRAll.end()),
 		matchPointPairsLRAll.end());
@@ -367,6 +369,9 @@ StitchingInfoGroup StitchingUtil::doStitch(
 	default:
 		assert(false);
 	}
+	//LOG_MESS(sInfoG[0]);
+	//LOG_MESS("at doStitch");
+	//system("pause");
 	return sInfoG;
 }
 
@@ -388,7 +393,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 		assert(sInfoGNotNull.empty() || sInfoGNotNull.size() == 4);
 		sInfoG.push_back(_stitch(srcs, dstFB, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0],FIX_RESIZE_0));
 		std::reverse(srcs.begin(), srcs.end());
-		sInfoG.push_back(_stitch(srcs, dstBF, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[1], FIX_RESIZE_0)));
+		sInfoG.push_back(_stitch(srcs, dstBF, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[1], FIX_RESIZE_0));
 		std::reverse(srcs.begin(), srcs.end());
 		//imshow("BF",dstBF);
 		//imshow("FB",dstFB);
@@ -450,14 +455,6 @@ void StitchingUtil::unzipMatchedPair(
 			matchedL.push_back(matchedPair[i].first);
 			matchedR.push_back(matchedPair[i].second);
 		}
-}
-
-bool StitchingUtil::_cmp_pp2f(const std::pair<Point2f, Point2f> &a, const std::pair<Point2f, Point2f> &b) {
-	return a.first == b.first ? _cmp_p2f(a.second, b.second) : _cmp_p2f(a.first, b.first);
-}
-
-bool StitchingUtil::_cmp_p2f(const Point2f &a, const Point2f &b) {
-	return a.x == b.x ? a.y < b.y : a.x < b.x;
 }
 
 Mat StitchingUtil::getMask(const Mat &srcImage, bool isLeft, std::pair<double, double> &ratio) {

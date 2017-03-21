@@ -39,8 +39,11 @@
     <ClInclude Include="TestCase.h">
       <Filter>源文件</Filter>
     </ClInclude>
-    <ClInclude Include="_matchers.h">
-      <Filter>头文件\Supplements</Filter>
+    <ClInclude Include="Supplements\RewarpableWarper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Supplements\Matchers.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -62,8 +65,11 @@
     <ClCompile Include="StitchingInfo.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="_matchers.cpp">
-      <Filter>头文件\Supplements</Filter>
+    <ClCompile Include="Supplements\RewarpableWarper.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Supplements\Matchers.cpp">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
