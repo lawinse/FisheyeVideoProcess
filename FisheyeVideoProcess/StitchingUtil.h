@@ -2,6 +2,8 @@
 
 #include "Config.h"
 #include <unordered_map>
+#include <unordered_set>
+#include ".\Supplements\RewarpableWarper.h"
 
 #ifdef OPENCV_3
 	#include<opencv2\stitching.hpp>
@@ -34,6 +36,7 @@ enum StitchingPolicy {
 	STITCH_ONE_SIDE, // Deprecated
 	
 	STITCH_DOUBLE_SIDE,
+	STITCH_DOUBLE_SIDE_NOT_DIRECTION_CORRECTION,
 	
 	// Experimental, not stable
 	STITCH_DOUBLE_SIDE_ONCE_TIME,
@@ -63,45 +66,7 @@ struct OpenCVStitchParam {
 		}
 };
 
-
-struct VecOfVecAverageHelper {
-	typedef std::vector<std::vector<float>> Vec2Vecf;
-	
-	Vec2Vecf data;
-	Vec2Vecf averValue;
-	int cnt;
-
-	VecOfVecAverageHelper():cnt(0){
-	};
- 
-	Vec2Vecf getAver(bool reset = true) {
-		if (!data.empty()){
-			averValue = Vec2Vecf(data.size());
-			for (int i=0; i<data.size(); ++i) averValue[i].assign(data[i].begin(), data[i].end());
-			for (int i=0; i<averValue.size(); ++i)
-				for (int j=0; j<averValue[i].size(); ++j) 
-					averValue[i][j]/=double(cnt);
-			if (reset) data.clear(), cnt = 0;
-		}
-		return averValue;
-	}
-
-	void addData(Vec2Vecf& _data) {
-		if (data.empty()) {
-			data = Vec2Vecf(_data.size());
-			for (int i=0; i<data.size(); ++i) data[i].assign(_data[i].begin(), _data[i].end());
-		} else {
-			assert(data.size() == _data.size());
-			for (int i=0; i<data.size(); ++i) {
-				assert(data[i].size() == _data[i].size());
-				for (int j = 0; j<data[i].size(); ++j)
-					data[i][j] += _data[i][j];
-			}
-		}
-		++cnt;
-	}
-};
-
+class StitchingUtil;
 class StitchingInfo;
 typedef std::vector<StitchingInfo> StitchingInfoGroup;
 
@@ -111,35 +76,18 @@ public:
 	double nonBlackRatio;
 	//float warpedImageScale;
 	Size resizeSz;
+	int srcType;
 	
 	std::pair<double, double> maskRatio;
 	std::vector<Range> ranges;	// only cares width-wise
 	std::vector<cv::detail::CameraParams> cameras;
-	std::vector<std::vector<float>> warpData;
+	Mat warpData;
+	std::vector<supp::ResultRoi> resultRois;
+	std::vector<supp::PlaneLinearTransformHelper> pltHelpers;
 
 	StitchingInfo(){clear();}
-	StitchingInfo(const StitchingInfo &sinfo){
-		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
-		resizeSz = sinfo.resizeSz;
-		maskRatio = sinfo.maskRatio;
-		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
-		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
-		warpData = std::vector<std::vector<float>>(sinfo.warpData.size());
-		for (int i=0; i<warpData.size(); ++i)
-			warpData[i].assign(sinfo.warpData[i].begin(), sinfo.warpData[i].end());
-	}
-	StitchingInfo &StitchingInfo::operator = (const StitchingInfo &sinfo) {
-		if (this == &sinfo) return *this;
-		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
-		resizeSz = sinfo.resizeSz;
-		maskRatio = sinfo.maskRatio;
-		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
-		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
-		warpData = std::vector<std::vector<float>>(sinfo.warpData.size());
-		for (int i=0; i<warpData.size(); ++i)
-			warpData[i].assign(sinfo.warpData[i].begin(), sinfo.warpData[i].end());
-		return *this;
-	}
+	StitchingInfo(const StitchingInfo &sinfo);
+	StitchingInfo& operator = (const StitchingInfo &sinfo);
 
 	friend std::ostream& operator <<(std::ostream&, const StitchingInfo&);
 	void clear();
@@ -148,18 +96,11 @@ public:
 	void setRanges(const Range &fullImgeRange);
 	bool isSuccess() const;
 	double evaluate() const;
-	double getWarpScale() const;
+	float getWarpScale() const;
 	bool setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
 	void setFromCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
-	float getLastScale() const {return warpData[warpData.size()-1][0];}
-	float getAverFocal() const {
-		std::vector<double> focals;
-		for (size_t i = 0; i < cameras.size(); ++i) {
-			focals.push_back(cameras[i].focal);
-		}
-		sort(focals.begin(), focals.end());
-		return (focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
-	}
+	float getLastScale() const {return warpData.at<float>(warpData.rows-1,0);}
+	float getAverFocal() const {return getWarpScale();}
 
 	static bool isSuccess(const StitchingInfoGroup &);
 	static double evaluate(const StitchingInfoGroup &);
@@ -167,12 +108,21 @@ public:
 
 class LocalStitchingInfoGroup {
 	#define LSIG_WINDOW_SIZE 10
-	#define LSIG_BEST_NUM 7
+	#define LSIG_BEST_NONBLACK_NUM 5
+	#define LSIG_SELECT_NUM 1
+	#define LSTG_MAX_STITCHED_BUFF_SIZE 3
 	int wSize;
 	int startIdx, endIdx;
 	std::unordered_map<int, std::pair<StitchingInfoGroup,double>> groups;
 	std::unordered_map<int, std::vector<Mat>> stitchingWaitingBuff;
 	std::vector<std::pair<int, Mat>> stitchedBuff;
+	
+	// For resultRois
+	std::vector<std::vector<supp::ResultRoi>> resultRoisBase;
+	std::unordered_set<int> resultRoisUsedFrameBase;
+	std::vector<std::vector<supp::ResultRoi>> resultRoiCur;
+	std::unordered_set<int> resultRoisUsedFrameCur;
+	std::vector<std::vector<supp::PlaneLinearTransformHelper>> pltHelperGroup;
 
 
 
@@ -194,10 +144,12 @@ public:
 		}
 		
 	}
+	bool isStitchedBuffFull() const {return stitchedBuff.size() >= LSTG_MAX_STITCHED_BUFF_SIZE;}
 	void addToStitchedBuff(int fidx, Mat& m) {stitchedBuff.push_back(std::make_pair(fidx,m.clone()));}
 	std::vector<std::pair<int, Mat>>* getStitchedBuff() {return &stitchedBuff;}
 	void clearStitchedBuff() {stitchedBuff.clear();}
-	StitchingInfoGroup getAver(int head, int tail, std::vector<int>&);
+	StitchingInfoGroup getAver(int head, int tail, std::vector<int>&, StitchingUtil &);
+	void adjustPltForLSIG(StitchingInfoGroup &, const std::vector<int>&, StitchingUtil &);
 
 };
 
@@ -254,11 +206,14 @@ private:
 		const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType,StitchingInfo &sInfoNotNull, const Size resizeSz = Size(), std::pair<double, double> &ratio=defaultMaskRatio );
 	StitchingInfoGroup _stitchDoubleSide(std::vector<Mat> &srcs, Mat &dstImage, StitchingInfoGroup &, const StitchingPolicy sp, const StitchingType sType);
 
-	static void removeBlackPixelByDoubleScan(Mat &, Mat &, StitchingInfo &);
+	static bool removeBlackPixelByDoubleScan(Mat &, Mat &, StitchingInfo &);
 	static bool removeBlackPixelByContourBound(Mat &, Mat &, StitchingInfo &);
 	static bool checkInterior(const Mat& mask, const Rect& interiorBB, bool &top, bool &bottom, bool &left, bool &right);
 public:
 	OpenCVStitchParam osParam;
+	StitchingType stitchingType;
+	StitchingPolicy stitchingPolicy;
+
 	StitchingUtil(){osParam = OpenCVStitchParam();}
 	~StitchingUtil(){};
 

@@ -1,10 +1,39 @@
 #include "StitchingUtil.h"
-
+#include "ImageUtil.h"
 void StitchingInfo::clear() {
 	imgCnt = 0;
 	ranges.clear();
 	cameras.clear();
+	resultRois.clear();
+	pltHelpers.clear();
 }
+StitchingInfo::StitchingInfo(const StitchingInfo &sinfo){
+		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
+		srcType = sinfo.srcType;
+		resizeSz = sinfo.resizeSz;
+		maskRatio = sinfo.maskRatio;
+		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
+		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
+		warpData = sinfo.warpData.clone();
+		resultRois.assign(sinfo.resultRois.begin(), sinfo.resultRois.end());
+		pltHelpers.assign(sinfo.pltHelpers.begin(), sinfo.pltHelpers.end());
+}
+
+StitchingInfo &StitchingInfo::operator = (const StitchingInfo &sinfo) {
+		if (this == &sinfo) return *this;
+		imgCnt = sinfo.imgCnt, nonBlackRatio = sinfo.nonBlackRatio;
+		srcType = sinfo.srcType;
+		resizeSz = sinfo.resizeSz;
+		maskRatio = sinfo.maskRatio;
+		ranges.assign(sinfo.ranges.begin(), sinfo.ranges.end());
+		cameras.assign(sinfo.cameras.begin(), sinfo.cameras.end());
+		warpData = sinfo.warpData.clone();
+		resultRois.assign(sinfo.resultRois.begin(), sinfo.resultRois.end());
+		pltHelpers.assign(sinfo.pltHelpers.begin(), sinfo.pltHelpers.end());
+		return *this;
+}
+
+
 
 bool StitchingInfo::isNull() const{
 	return imgCnt == 0;
@@ -55,9 +84,7 @@ std::ostream& operator <<(std::ostream& out, const StitchingInfo& sInfo) {
 	//	out <<  "Range #" << i+1 << ":" << sInfo.ranges[i].start << "," << sInfo.ranges[i].end << "\n";
 	//}
 	out << "warpData:\n" << "\n";
-	for (int i=0; i<sInfo.warpData.size(); ++i) {
-		out << vec2str(sInfo.warpData[i]) << "\n";
-	}
+	out << sInfo.warpData << "\n";
 	/*out << (sInfo.cameras[1].focal-sInfo.cameras[0].focal)*1.0/sInfo.cameras[0].focal<<"\n";*/
 	out << "<\\STITCHING_INFO>" << std::endl;
 	return out;
@@ -111,29 +138,34 @@ int LocalStitchingInfoGroup::push_back(StitchingInfoGroup g) {
 	return startIdx;
 }
 
-StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vector<int> &selectedFrameIdx) {
+StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vector<int> &selectedFrameIdx, StitchingUtil &stitchingUtil) {
 	std::vector<std::pair<int,double>> tmp(tail-head);
 	for (int i=0; i<tmp.size(); ++i) {tmp[i] = std::make_pair(head + i, groups[head+i].second);}
 	std::sort(tmp.begin(), tmp.end(),
 		[](const std::pair<int,double> &a, const std::pair<int,double> &b) {return a.second>b.second;});
-	int r = LSIG_BEST_NUM-1;
+	int r = LSIG_BEST_NONBLACK_NUM-1;
 	for (;r>=0 && tmp[r].second == 0;--r);
 	if (r < 0) {LOG_ERR("The local stitching info is entirely bad.");}
 	++r;
 
 #define GET_GROUP(i) (groups[tmp[i].first].first)
 	// Using the middle scale ones
-	if (r > 3) {
+	if (r > LSIG_SELECT_NUM) {
 		for (int i=0; i<r; ++i) {
 			if (GET_GROUP(i).size() == 4) {
 				tmp[i].second = 
-					//(GET_GROUP(i)[0].getLastScale()+GET_GROUP(i)[0].getLastScale())*GET_GROUP(i)[2].getLastScale()*GET_GROUP(i)[3].getLastScale();
+					//(GET_GROUP(i)[0].getLastScale()+GET_GROUP(i)[1].getLastScale())*GET_GROUP(i)[2].getLastScale()*GET_GROUP(i)[3].getLastScale();
 					(GET_GROUP(i)[0].getAverFocal()+GET_GROUP(i)[1].getAverFocal())*GET_GROUP(i)[2].getAverFocal()*GET_GROUP(i)[3].getAverFocal();
+			} else if (GET_GROUP(i).size() == 2) {
+				tmp[i].second = 
+					//(GET_GROUP(i)[0].getLastScale()*GET_GROUP(i)[1].getLastScale());
+					(GET_GROUP(i)[0].getAverFocal()*GET_GROUP(i)[1].getAverFocal());
 			}
+
 		}
 		std::sort(tmp.begin(), tmp.begin()+r,
 			[](const std::pair<int,double> &a, const std::pair<int,double> &b) {return a.second<b.second;});
-		tmp.assign(tmp.begin()+r/2-1, tmp.begin()+r/2+1);
+		tmp.assign(max(tmp.begin()+r/2-(LSIG_SELECT_NUM+1)/2,tmp.begin()), min(tmp.end(),tmp.begin()+r/2+(LSIG_SELECT_NUM)/2));
 		r = tmp.size();
 	}
 
@@ -146,10 +178,11 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	
 
 	for (int j=0; j<ret.size(); ++j) {
+		ret[j].srcType = GET_GROUP(0)[j].srcType;
 		ret[j].imgCnt = GET_GROUP(0)[j].imgCnt;
 		ret[j].maskRatio = GET_GROUP(0)[j].maskRatio;
 		ret[j].cameras = std::vector<cv::detail::CameraParams>(GET_GROUP(0)[j].cameras.size());
-		VecOfVecAverageHelper averhelper;
+		ret[j].warpData = Mat::zeros(GET_GROUP(0)[j].warpData.size(),GET_GROUP(0)[j].warpData.type());
 		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
 			ret[j].cameras[camidx].aspect = 0;
 			ret[j].cameras[camidx].focal = 0;
@@ -166,7 +199,8 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 			*/
 			ret[j].resizeSz.width += GET_GROUP(i)[j].resizeSz.width;
 			ret[j].resizeSz.height += GET_GROUP(i)[j].resizeSz.height;
-			averhelper.addData(GET_GROUP(i)[j].warpData);
+			ret[j].warpData+= GET_GROUP(i)[j].warpData;
+	
 
 			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
 				ret[j].cameras[camidx].focal += GET_GROUP(i)[j].cameras[camidx].focal;
@@ -183,6 +217,7 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 		}
 		ret[j].resizeSz.width /= r;
 		ret[j].resizeSz.height /= r;
+		ret[j].warpData/= r;
 		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
 			ret[j].cameras[camidx].focal /= r;
 			ret[j].cameras[camidx].aspect /= r;
@@ -191,13 +226,15 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 			ret[j].cameras[camidx].R /= double(r);
 			ret[j].cameras[camidx].t /= double(r);
 		}
-		ret[j].warpData = averhelper.getAver();
 		//for (int i=0; i<ret[j].warpData.size(); ++i) {
 		//	LOG_MESS(vec2str(ret[j].warpData[i]));
 		//}
 		//LOG_MESS("at getAver()");
 		//system("pause");
 	}
+
+	// Adjust the PLT for StitchingInfoGroup
+	adjustPltForLSIG(ret, selectedFrameIdx, stitchingUtil);
 
 	return ret;
 
@@ -241,11 +278,102 @@ void StitchingInfo::setFromCamerasInternalParam(std::vector<cv::detail::CameraPa
 	}
 }
 
-double StitchingInfo::getWarpScale() const {
-	std::vector<double> focals;
+float StitchingInfo::getWarpScale() const {
+	std::vector<float> focals;
 	for (int i = 0; i < cameras.size(); ++i) {
 		focals.push_back(cameras[i].focal);
 	}
 	sort(focals.begin(), focals.end());
 	return (focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
+}
+
+void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const std::vector<int>&v, StitchingUtil &stitchingUtil) {
+	std::unordered_set<int> tmp(v.begin(), v.end());
+	if (tmp == resultRoisUsedFrameCur) {
+		LOG_MESS("LSIG: resultRoisUsedFrameCur remains the same.")
+		for (int i=0; i<group.size(); ++i) {
+			group[i].pltHelpers = pltHelperGroup[i];
+		}
+	} else {
+		if (resultRoisUsedFrameBase.empty()) {
+			LOG_WARN("LSIG: resultRoisUsedFrameBase is empty, set to" << vec2str(v));
+			resultRoisUsedFrameBase = tmp;
+			resultRoisUsedFrameCur = resultRoisUsedFrameBase;
+			// calc resultRois
+			Mat dummydst;
+			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil().createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			StitchingInfoGroup out;
+#ifdef TRY_CATCH
+			try {
+#endif
+				out = stitchingUtil.doStitch(
+						dummysrcs, dummydst, 
+						group,
+						stitchingUtil.stitchingPolicy,
+						stitchingUtil.stitchingType);
+#ifdef TRY_CATCH
+			} catch(cv::Exception e) {
+				LOG_ERR("LSIG: failed at fake doStitching, when Base empty.")
+				throw e;
+			}
+#endif
+			for (auto sinfo:out) {
+				resultRoisBase.push_back(sinfo.resultRois);
+			}
+			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
+			for (int i=0; i<out.size(); ++i) {
+				for (int j=0; j<out[i].resultRois.size(); ++j) {
+					auto plt = supp::PlaneLinearTransformHelper();
+					pltHelperGroup[i].push_back(plt);
+					//LOG_MESS("plt: " << plt.ax << ","<< plt.bx << ","<< plt.ay << ","<< plt.by  );
+					//system("pause");
+				}
+			}
+
+		} else {
+			LOG_WARN("LSIG: resultRoisUsedFrameCur changes, from" << \
+				vec2str(std::vector<int>(resultRoisUsedFrameCur.begin(), resultRoisUsedFrameCur.end())) \
+				<< " to" << vec2str(v));
+			resultRoisUsedFrameCur = tmp;
+			Mat dummydst;
+			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil().createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			StitchingInfoGroup out;
+#ifdef TRY_CATCH
+			try {
+#endif
+				out = stitchingUtil.doStitch(
+						dummysrcs, dummydst, 
+						group,
+						stitchingUtil.stitchingPolicy,
+						stitchingUtil.stitchingType);
+#ifdef TRY_CATCH
+			} catch(cv::Exception e) {
+				LOG_ERR("LSIG: failed at fake doStitching, when Cur changes.")
+				throw e;
+			}
+#endif
+			assert(out.size() == resultRoisBase.size());
+			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
+			for (int i=0; i<out.size(); ++i) {
+				group[i].pltHelpers.clear();
+				assert(out[i].resultRois.size() == resultRoisBase.size());
+				for (int j=0; j<out[i].resultRois.size(); ++j) {
+					//LOG_MESS("resultRoisBase: " <<  resultRoisBase[i][j].roi );
+					//LOG_MESS("out: " <<  out[i].resultRois[j].roi );
+					supp::PlaneLinearTransformHelper plt = supp::PlaneLinearTransformHelper::calcPLT(
+						resultRoisBase[i][j].roi,out[i].resultRois[j].roi);
+					group[i].pltHelpers.push_back(plt);
+					pltHelperGroup[i].push_back(plt);
+					//LOG_MESS("plt: " << plt.ax << ","<< plt.bx << ","<< plt.ay << ","<< plt.by  );
+					//system("pause");
+				}
+			}
+
+		}
+
+
+		
+	}
+
+
 }

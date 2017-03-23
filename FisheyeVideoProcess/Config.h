@@ -28,6 +28,7 @@
 	#define RUN_TEST
 #endif
 //#define SHOW_IMAGE
+//#define TRY_CATCH
 
 using namespace cv;
 

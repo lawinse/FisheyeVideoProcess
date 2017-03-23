@@ -2,6 +2,7 @@
 #include "Supplements\Matchers.h"
 #include "Supplements\RewarpableWarper.h"
 
+
 using namespace cv::detail;
 StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, StitchingInfo &sInfo, std::pair<double, double> &maskRatio) {
@@ -16,6 +17,8 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 
 StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,StitchingInfo &sInfoNotNull, std::pair<double, double> &maskRatio) {
+	#define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
+
 	StitchingInfo sInfo;
 
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
@@ -39,6 +42,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		sInfo.imgCnt = sInfoNotNull.imgCnt;
 		sInfo.maskRatio = sInfoNotNull.maskRatio;
 		sInfo.resizeSz = sInfoNotNull.resizeSz;
+		sInfo.srcType = sInfoNotNull.srcType;
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
 			//LOG_WARN("Orig Size:" << full_img1.size());
@@ -57,10 +61,10 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 
 	} else {
 
-		
 		sInfo.imgCnt = imgCnt;
 		sInfo.maskRatio = maskRatio;
 		sInfo.resizeSz = resizeSz;
+		sInfo.srcType = srcs[0].type();
 		LOG_MESS("Finding features... with MaskRatio (" << sInfo.maskRatio.first << "," << sInfo.maskRatio.second <<")");
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
@@ -99,9 +103,9 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			Mat R;
 			cameras[i].R.convertTo(R, CV_32F);
 			cameras[i].R = R;
-			LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << cameras[i].K());
-			LOG_MESS("Initial intrinsics R #" << i+1 << ":\n" << cameras[i].R);
-			LOG_MESS("Initial intrinsics t #" << i+1 << ":\n" << cameras[i].t);
+			//LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << cameras[i].K());
+			//LOG_MESS("Initial intrinsics R #" << i+1 << ":\n" << cameras[i].R);
+			//LOG_MESS("Initial intrinsics t #" << i+1 << ":\n" << cameras[i].t);
 			//system("pause");
 		}
 
@@ -121,7 +125,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	
 		std::vector<double> focals;
 		for (size_t i = 0; i < cameras.size(); ++i) {
-			LOG_MESS("Camera #" << i+1 << ":\n" << cameras[i].K());
+			//LOG_MESS("Camera #" << i+1 << ":\n" << cameras[i].K());
 			focals.push_back(cameras[i].focal);
 		}
 
@@ -166,12 +170,17 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	* Spherical is nearly deprecated
 	* Merator is slower but better than Cylindrical
 	*/
-
-	//supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
+#if USE_WARPER_TYPE==1
+	supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
+#elif USE_WARPER_TYPE==0
 	supp::RewarpableCylindricalWarper* warper = new supp::RewarpableCylindricalWarper(warped_image_scale * seam_work_aspect);
-
-	if (!sInfoNotNull.isNull())
+#elif USE_WARPER_TYPE==2
+	supp::RewarpableSphericalWarper* warper = new supp::RewarpableSphericalWarper(warped_image_scale * seam_work_aspect);
+#endif
+	if (!sInfoNotNull.isNull()) {
 		warper->setProjectorData(sInfoNotNull.warpData);
+		warper->setPLTs(sInfoNotNull.pltHelpers);
+	}
 
 	for (int i = 0; i < imgCnt; ++i) {
 		Mat_<float> K;
@@ -291,6 +300,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	}
 
 	sInfo.warpData = (warper)->getProjectorAllData();
+	sInfo.resultRois = (warper)->getResultRoiData();
 	sInfo.setRanges(corners, sizes);
 
 	Mat result, result_mask, tmp;

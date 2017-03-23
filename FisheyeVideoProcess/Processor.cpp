@@ -66,20 +66,27 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 	StitchingPolicy sp = StitchingPolicy::STITCH_DOUBLE_SIDE;
 	StitchingType sType = StitchingType::OPENCV_SELF_DEV;
 
+	stitchingUtil.stitchingPolicy = sp;
+	stitchingUtil.stitchingType = sType;
+
 	pLSIG->addToWaitingBuff(frameIdx, srcs);
 	std::vector<Mat> vmat;
 	Mat dummy, tmpDst;
+#ifdef TRY_CATCH
 	try {
+#endif
 		sInfoGOUT = stitchingUtil.doStitch(
 				srcs, dummy, 
 				sInfoGIN,
 				sp,
 				sType);
 		pLSIG->push_back(sInfoGOUT);
+#ifdef TRY_CATCH
 	} catch(cv::Exception e) {
 		pLSIG->push_back(sInfoGOUT);
 		throw e;
 	}
+#endif
 
 	int leftIdx, rightIdx;
 	calculateWind(curStitchingIdx, leftIdx, rightIdx);
@@ -91,15 +98,17 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 		do {
 			bool b = pLSIG->getFromWaitingBuff(curStitchingIdx, vmat);
 			assert(b);
-			sInfoGIN = pLSIG->getAver(leftIdx, rightIdx, selFrame);
+			sInfoGIN = pLSIG->getAver(leftIdx, rightIdx, selFrame, stitchingUtil);
 			LOG_MESS("Stitching "<< curStitchingIdx << " frame using " <<vec2str(selFrame) << "frames.");
 			stitchingUtil.doStitch(
 				vmat, tmpDst, 
 				sInfoGIN,
 				sp,
 				sType);
+			panoRefine(tmpDst, tmpDst);
 			pLSIG->addToStitchedBuff(curStitchingIdx, tmpDst);
-			LOG_MESS("Done stitchig " << curStitchingIdx << " frame.")
+			LOG_MARK("Done stitching " << curStitchingIdx << " frame.");
+			if (pLSIG->isStitchedBuffFull()) persistPano();
 			calculateWind(++curStitchingIdx, leftIdx, rightIdx);
 		} while(curStitchingIdx<ttlFrmsCnt && pLSIG->cover(leftIdx, rightIdx));
 		return true;
@@ -133,7 +142,9 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 	while (fIndex < ttlFrmsCnt) {
 		// frame by frame
 		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt-1 << " frame ...");
+#ifdef TRY_CATCH
 		try {
+#endif
 			std::vector<Mat> tmpFrms(camCnt);
 			Mat dstImage;
 
@@ -167,33 +178,40 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			}
 			std::cout << "\tStitching ..." <<std::endl;
 			panoStitch(dstFrms, fIndex);
-			auto buf = pLSIG->getStitchedBuff();
-			for (int dsti=0; dsti<buf->size(); ++dsti) {
-				auto p = buf->at(dsti);
-				int fidx = p.first;
-				dstImage = p.second;
-				panoRefine(dstImage, dstImage);
-	#ifdef SHOW_IMAGE
-				Mat forshow;
-				_resize_(dstImage, forshow, Size(1400, 700));
-				imshow("windows11",forshow);
-				cvWaitKey();
-	#endif
-			
-				std::string dstname;
-				GET_STR(OUTPUT_PATH << fidx << ".jpg", dstname);
-				imwrite(dstname, dstImage);
-
-				vWriter << dstImage;
-			}
-			pLSIG->clearStitchedBuff();
+#ifdef TRY_CATCH
 		} catch (cv::Exception e) {
+			
 			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: " <<e.what());
 		} catch (...) {
 			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: UNKNOWN");
 		}
-
+#endif
+		persistPano();
 		++fIndex;
 
 	}
+}
+
+void Processor::persistPano() {
+	auto buf = pLSIG->getStitchedBuff();
+	for (int dsti=0; dsti<buf->size(); ++dsti) {
+		auto p = buf->at(dsti);
+		int fidx = p.first;
+		Mat dstImage = p.second;
+				
+#ifdef SHOW_IMAGE
+		Mat forshow;
+		_resize_(dstImage, forshow, Size(1400, 700));
+		imshow("windows11",forshow);
+		cvWaitKey();
+#endif
+			
+		std::string dstname;
+		GET_STR(OUTPUT_PATH << fidx << ".jpg", dstname);
+		LOG_MESS("Persisting " << fidx << ".jpg");
+		imwrite(dstname, dstImage);
+
+		vWriter << dstImage;
+	}
+	pLSIG->clearStitchedBuff();
 }

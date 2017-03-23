@@ -32,6 +32,7 @@ private:
 	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
 	void panoRefine(Mat &, Mat &dstImage);
 	void calculateWind(int fidx, int &lidx, int &ridx);
+	void persistPano();
 public:
 	Processor(LocalStitchingInfoGroup *);
 	~Processor();

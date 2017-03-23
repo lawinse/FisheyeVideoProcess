@@ -134,7 +134,9 @@ struct ReMapping{
 
 	bool load(int cpHash) {
 		if (isMapped()) return true;
+#ifdef TRY_CATCH
 		try {
+#endif
 			FILE *fpSrc = NULL;
 			int a,b,c,d;
 			if ((fpSrc = fopen(getPersistFilename(cpHash).c_str(), "rb")) == NULL) {
@@ -153,15 +155,19 @@ struct ReMapping{
 			LOG_MESS("Successfully Load ReMapping data.");
 			fclose(fpSrc);
 			return true;
+#ifdef TRY_CATCH
 		} catch(...) {
 			LOG_ERR("Load ReMapping data UNKNOWN error.");
 			return false;
 		}
+#endif
 	}
 
 	void persist(int cpHash) {
 		assert(isMapped());
+#ifdef TRY_CATCH
 		try {
+#endif
 			FILE *fpDst;
 			if ((fpDst = fopen(getPersistFilename(cpHash).c_str(), "wb+")) == NULL) {
 				LOG_WARN("Persist ReMapping cannot be found.");
@@ -175,10 +181,12 @@ struct ReMapping{
 				fwrite(&kv,sizeof(std::pair<std::pair<int,int>, std::pair<int,int>>),1,fpDst);
 			}
 			fclose(fpDst);
+#ifdef TRY_CATCH
 		} catch(...) {
 			LOG_ERR("Persist ReMapping data UNKNOWN error.");
 			return;
 		}
+#endif
 	}
 
 

@@ -16,4 +16,9 @@ public:
 		filter2D(src,dst,src.depth(),k);
 	}
 
+	Mat createDummyMatRGB(Size sz, int src_type) {
+		Mat m(sz, src_type,Scalar(255,255,255));
+		return m;
+	}
+
 };

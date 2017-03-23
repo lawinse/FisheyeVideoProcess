@@ -7,7 +7,7 @@ void _ProjectorBase::setCameraParams(InputArray _K, InputArray _R, InputArray _T
 		autoSaveProjData();
 	}
 	else {
-		setAllMats(data[curProjIdx]);
+		setAllMats(projData[curProjIdx]);
 		curProjIdx++;
 	}/*
 	for (int ii=0; ii<data.size(); ++ii) {
@@ -17,8 +17,8 @@ void _ProjectorBase::setCameraParams(InputArray _K, InputArray _R, InputArray _T
 }
 
 void _ProjectorBase::autoSaveProjData() {
-	data.push_back(getAllMats());
-	ttlProjTime = data.size();
+	projData.push_back(getAllMats());
+	ttlProjTime = projData.size();
 }
 
 
@@ -37,17 +37,17 @@ void _ProjectorBase::setAllMatsMultiple(std::vector<std::vector<float>> &_data) 
 	LOG_MESS("Set projector matrix params manually");
 	ttlProjTime = _data.size();
 	setAllMatsData(true);
-	data = std::vector<std::vector<float>>(_data.size());
-	for (int i=0; i<data.size(); ++i) 
-		data[i].assign(_data[i].begin(), _data[i].end());
+	projData = std::vector<std::vector<float>>(_data.size());
+	for (int i=0; i<projData.size(); ++i) 
+		projData[i].assign(_data[i].begin(), _data[i].end());
 }
 
 std::vector<std::vector<float>> _ProjectorBase::getAllMatsMultiple() {
 	std::vector<std::vector<float>> _data;
 	if (ttlProjTime > 0) {
-		_data = std::vector<std::vector<float>>(data.size());
-		for (int i=0; i<data.size(); ++i) 
-			_data[i].assign(data[i].begin(), data[i].end());
+		_data = std::vector<std::vector<float>>(projData.size());
+		for (int i=0; i<projData.size(); ++i) 
+			_data[i].assign(projData[i].begin(), projData[i].end());
 	}
 	return _data;
 }

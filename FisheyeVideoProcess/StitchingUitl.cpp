@@ -145,11 +145,6 @@ void StitchingUtil::facebookKeyPointMatching(Mat &left, Mat &right, std::vector<
 	assert(right.channels() == 1);
 
 	std::vector<std::pair<Point2f, Point2f>> matchPointPairsLRAll;
-	//try {
-	//	matchWithBRISK(left, right, matchPointPairsLRAll);  /* BRISK seems not so good */
-	//} catch(...){
-	//	std::cout << "[Warning] matchingWithBrisk failed.";
-	//};
 	matchWithORB(left, right, matchPointPairsLRAll);
 #ifdef OPENCV_3
 	matchWithAKAZE(left, right, matchPointPairsLRAll);
@@ -363,6 +358,7 @@ StitchingInfoGroup StitchingUtil::doStitch(
 	StitchingInfoGroup sInfoG;
 	switch(sp) {
 	case STITCH_DOUBLE_SIDE:
+	case STITCH_DOUBLE_SIDE_NOT_DIRECTION_CORRECTION:
 	case STITCH_DOUBLE_SIDE_ONCE_TIME:
 		sInfoG = _stitchDoubleSide(srcs, dstImage, sInfoGNotNull, sp, sType);
 		break;
@@ -387,7 +383,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 		tmpSrc.push_back(srcs[0](Range(0,srcs[0].rows), Range(srcs[0].cols*(0.5-OVERLAP_RATIO_DOUBLESIDE_4), srcs[0].cols)).clone());
 		tmpSrc.push_back(srcs[1](Range(0,srcs[1].rows), Range(0,srcs[1].cols/2)).clone());
 		sInfoG.push_back(_stitch(tmpSrc, dstImage, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0], Size(), std::make_pair(1.0,0.7)));
-	} else {
+	} else if (sp == STITCH_DOUBLE_SIDE){
 		Mat dstBF, dstFB;
 		StitchingUtil::osParam.blend_strength = 4;
 		assert(sInfoGNotNull.empty() || sInfoGNotNull.size() == 4);
@@ -434,7 +430,30 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 			dstTmp(Range(0,dstTmp.rows), sInfoG[2].ranges[0]).clone());
 		StitchingUtil::osParam.blend_strength = 1;
 		sInfoG.push_back(_stitch(tmpSrc,dstImage,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[3], FIX_RESIZE_2,std::make_pair(overlapRatio_tolerance,0.7)));
+	} else if (sp == STITCH_DOUBLE_SIDE_NOT_DIRECTION_CORRECTION) {
+		Mat dstFB;
+		StitchingUtil::osParam.blend_strength = 5;
+		assert(sInfoGNotNull.empty() || sInfoGNotNull.size() == 2);
+		sInfoG.push_back(_stitch(srcs, dstFB, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0],FIX_RESIZE_0));
+
+
+		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
+		std::vector<Mat> tmpSrc;
+		tmpSrc.push_back(
+			dstFB(
+				Range(0,dstFB.rows), 
+				Range(int(sInfoG[0].ranges[1].start), dstFB.cols))
+				.clone());
+		tmpSrc.push_back(
+			dstFB(
+				Range(0,dstFB.rows), 
+				Range(0, int(sInfoG[0].ranges[0].end)))
+				.clone());
+		StitchingUtil::osParam.blend_strength = 5;
+		sInfoG.push_back(_stitch(tmpSrc,dstImage,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[1], FIX_RESIZE_1));
+
 	}
+
 	return sInfoG;
 }
 
@@ -509,30 +528,31 @@ bool StitchingUtil::almostBlack(const Vec3b &v) {
 }
 
 
-void StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingInfo &sInfo) {
-	// first find height boundary
+bool StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingInfo &sInfo) {
+	// first find width boundary, better for stitching
 	Mat_<Vec3b> tmpSrc = src;
 	//imshow("src",tmpSrc);
 	//	cvWaitKey();
-	int widthSideTolerance = tmpSrc.cols*0.02;
+	int heightSideTolerance = tmpSrc.rows*0.1;
 	int maxRows = tmpSrc.rows-1, minRows = 0;
 	int maxCols = tmpSrc.cols-1, minCols = 0;
-	LOG_MESS(widthSideTolerance << " " << maxRows);
-	for (int i=widthSideTolerance; i<tmpSrc.cols-widthSideTolerance; ++i) {
-		for (;maxRows>=0 && almostBlack(tmpSrc(maxRows, i)); --maxRows);
-		for (;minRows<tmpSrc.rows&&almostBlack(tmpSrc(minRows, i)); ++minRows);
-	}
-	// then find width boundary
-	for (int j=minRows; j <= maxRows; ++j) {
+	for (int j=heightSideTolerance; j < tmpSrc.rows- heightSideTolerance; ++j) {
 		for (;maxCols>=0&&almostBlack(tmpSrc(j, maxCols)); --maxCols);
 		for (;minCols<tmpSrc.cols&&almostBlack(tmpSrc(j, minCols)); ++minCols);
+	}
+	
+	// then find height boundary
+	for (int i=minCols; i<=maxCols; ++i) {
+		for (;maxRows>=0 && almostBlack(tmpSrc(maxRows, i)); --maxRows);
+		for (;minRows<tmpSrc.rows&&almostBlack(tmpSrc(minRows, i)); ++minRows);
 	}
 
 	double restRatioPercent = (maxRows-minRows+1)*(maxCols-minCols+1)*1.0/(tmpSrc.cols*tmpSrc.rows);
 	LOG_MESS("Remove black pixel, remain:" << restRatioPercent*100 << "%%");
 	dst = src(Range(minRows,maxRows), Range(minCols,maxCols)).clone();
 	if (restRatioPercent < NONBLACK_REMAIN_FLOOR) {
-		LOG_ERR("removeBlackPixelByDoubleScan() only remain " << restRatioPercent*100 <<"%% of src.")
+		LOG_ERR("removeBlackPixelByDoubleScan() only remain " << restRatioPercent*100 <<"%% of src.");
+		return false;
 #ifdef SHOW_IMAGE
 		imshow("src",tmpSrc);
 		imshow("dst",dst);
@@ -541,6 +561,7 @@ void StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingIn
 	}
 	sInfo.nonBlackRatio = restRatioPercent;
 	sInfo.setRanges(Range(minCols, maxCols));
+	return true;
 	
 }
 // REF: http://stackoverflow.com/questions/21410449/how-do-i-crop-to-largest-interior-bounding-box-in-opencv
