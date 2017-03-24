@@ -29,6 +29,8 @@ enum DistanceMappingType {
 	PERSPECTIVE,
 };
 
+#define camFieldAngle (180*PI/180.0)
+#define focusLen 450.0 /* TOSOLVE: the value remains to be tuned */
 
 struct CorrectingParams {
 	CorrectingType ctype;
@@ -60,6 +62,8 @@ struct CorrectingParams {
 		v.push_back(radiusOfCircle);
 		v.push_back(dmType);
 		v.push_back(ctype);
+		v.push_back(camFieldAngle*10000);
+		v.push_back(focusLen*10000);
 		if (ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_FORWARD || ctype == LONG_LAT_MAPPING_CAM_LENS_MOD_UNFIXED_REVERSED ) {
 			v.push_back((int)round(w.x*10000));
 			v.push_back((int)round(w.y*10000));
@@ -194,8 +198,7 @@ struct ReMapping{
 
 class CorrectingUtil {
 private:
-	#define camFieldAngle PI
-	#define focusLen 450.0 /* TOSOLVE: the value remains to be tuned */
+	
 
 	ReMapping pixelReMapping;
 	CorrectingParams _cParams;

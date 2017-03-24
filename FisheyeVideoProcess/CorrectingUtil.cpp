@@ -391,8 +391,8 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 			//std::cout << i << " " << j << std::endl;
 			switch (dmtype) {
 			case LONG_LAT:
-				lat = getPhiFromV((double)j*4.0/srcImage.rows);
-				lon = getPhiFromV((double)i*4.0/srcImage.cols);
+				lat = getPhiFromV((double)j*4.0/dstImage.rows);
+				lon = getPhiFromV((double)i*4.0/dstImage.cols);
 
 				x = -sin(lat)*cos(lon);
 				y = cos(lat);
@@ -429,9 +429,7 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 			if (u_src < 0 || u_src >= srcImage.rows || v_src < 0 || v_src >= srcImage.cols)
 					continue;
 
-			dstImage.at<Vec3b>(j,i)[0] = srcImage.at<Vec3b>(v_src,u_src)[0];
-			dstImage.at<Vec3b>(j,i)[1] = srcImage.at<Vec3b>(v_src,u_src)[1];
-			dstImage.at<Vec3b>(j,i)[2] = srcImage.at<Vec3b>(v_src,u_src)[2];
+			dstImage.at<Vec3b>(j,i) = srcImage.at<Vec3b>(v_src,u_src);
 			pixelReMapping.set(std::make_pair(v_src,u_src), std::make_pair(j,i));
 		}
 }
@@ -451,7 +449,7 @@ void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int 
 	double x_cart, y_cart;
 	double u_src,v_src,u_dst,v_dst;
 	double lon_offset = (PI - camFieldAngle) / 2, lat_offset = (PI - camFieldAngle) / 2;
-	double lat_max = 2*getLFromPhi_ufixed(0,w_lat), lon_max = 2*getLFromPhi_ufixed(0,w_lat);
+	double lat_max = 2*getLFromPhi_ufixed(0,w_lat), lon_max = 2*getLFromPhi_ufixed(0,w_lon);
 
 	int left, top;
 

@@ -29,10 +29,11 @@ private:
 	
 	void findFisheyeCircleRegion();
 	void fisheyeCorrect(Mat &src, Mat &dst);
+	void preProcess(Mat &src, Mat &dst);
 	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
 	void panoRefine(Mat &, Mat &dstImage);
 	void calculateWind(int fidx, int &lidx, int &ridx);
-	void persistPano();
+	void persistPano(bool isFlush = false);
 public:
 	Processor(LocalStitchingInfoGroup *);
 	~Processor();

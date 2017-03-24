@@ -388,6 +388,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 		StitchingUtil::osParam.blend_strength = 4;
 		assert(sInfoGNotNull.empty() || sInfoGNotNull.size() == 4);
 		sInfoG.push_back(_stitch(srcs, dstFB, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0],FIX_RESIZE_0));
+		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
 		std::reverse(srcs.begin(), srcs.end());
 		sInfoG.push_back(_stitch(srcs, dstBF, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[1], FIX_RESIZE_0));
 		std::reverse(srcs.begin(), srcs.end());
@@ -416,13 +417,12 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 					min(dstBF.cols,int(sInfoG[1].ranges[1].start+ratio_2*sInfoG[1].ranges[1].size()))))
 				.clone());
 
-		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
-
 		// dstTmp: F-B-F
 		StitchingUtil::osParam.blend_strength = 0;
 		sInfoG.push_back(_stitch(tmpSrc,dstTmp,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[2], FIX_RESIZE_1,std::make_pair(overlapRatio_tolerance,0.7)));	
 		//imshow("FBF",dstTmp);
 		//cvWaitKey();
+		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
 		tmpSrc.clear();
 		tmpSrc.push_back(
 			dstTmp(Range(0,dstTmp.rows), sInfoG[2].ranges[1]).clone());
@@ -509,7 +509,7 @@ void StitchingUtil::showMatchingPair(
 		Mat img_matches;
 		drawMatches(left,kptL, right, kptR, goodMatches, img_matches);
 		Mat forshow;
-		_resize_(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
+		ImageUtil::_resize_(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
 		imshow("MatchSift", forshow);
 		waitKey();
 }

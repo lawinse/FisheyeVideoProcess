@@ -54,7 +54,7 @@ void Processor::fisheyeCorrect(Mat &src, Mat &dst) {
 		radiusOfCircle,
 		LONG_LAT);
 	//cp.use_reMap = false;
-	//cp.w = Point2d(95*PI/180, 95*PI/180);
+	//cp.w = Point2d(90*PI/180, 90*PI/180);
 	correctingUtil.doCorrect(src, dst, cp);
 }
 
@@ -108,7 +108,7 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 			panoRefine(tmpDst, tmpDst);
 			pLSIG->addToStitchedBuff(curStitchingIdx, tmpDst);
 			LOG_MARK("Done stitching " << curStitchingIdx << " frame.");
-			if (pLSIG->isStitchedBuffFull()) persistPano();
+			persistPano();
 			calculateWind(++curStitchingIdx, leftIdx, rightIdx);
 		} while(curStitchingIdx<ttlFrmsCnt && pLSIG->cover(leftIdx, rightIdx));
 		return true;
@@ -118,11 +118,10 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	Mat tmp, tmp2;
 	tmp = srcImage.clone();
-	ImageUtil iu;
 	// USM
-	_resize_(tmp, tmp, dstPanoSize,0,0);
-	iu.USM(tmp,tmp);
-	//iu.LaplaceEnhannce(tmp,tmp);
+	ImageUtil::_resize_(tmp, tmp, dstPanoSize,0,0);
+	ImageUtil::USM(tmp,tmp);
+	//ImageUtil::LaplaceEnhannce(tmp,tmp);
 	dstImage = tmp.clone();
 }
 
@@ -174,7 +173,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			std::cout << "\tCorrecting ..." <<std::endl;
 			for (int i=0; i<camCnt; ++i) {
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
-				//_resize_(dstFrms[i], dstFrms[i], Size(1000,1000));
+				//ImageUtil::_resize_(dstFrms[i], dstFrms[i], Size(1000,1000));
 			}
 			std::cout << "\tStitching ..." <<std::endl;
 			panoStitch(dstFrms, fIndex);
@@ -186,13 +185,15 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			LOG_ERR("process "<< fIndex  << "/" << ttlFrmsCnt << " frame: UNKNOWN");
 		}
 #endif
-		persistPano();
+		
 		++fIndex;
 
 	}
+	persistPano(true);	//final flush
 }
 
-void Processor::persistPano() {
+void Processor::persistPano(bool isFlush) {
+	if (!pLSIG->isStitchedBuffFull() && !isFlush) return; 
 	auto buf = pLSIG->getStitchedBuff();
 	for (int dsti=0; dsti<buf->size(); ++dsti) {
 		auto p = buf->at(dsti);
@@ -201,14 +202,14 @@ void Processor::persistPano() {
 				
 #ifdef SHOW_IMAGE
 		Mat forshow;
-		_resize_(dstImage, forshow, Size(1400, 700));
+		ImageUtil::_resize_(dstImage, forshow, Size(1400, 700));
 		imshow("windows11",forshow);
 		cvWaitKey();
 #endif
 			
 		std::string dstname;
 		GET_STR(OUTPUT_PATH << fidx << ".jpg", dstname);
-		LOG_MESS("Persisting " << fidx << ".jpg");
+		LOG_MESS("Persisting " << fidx << ".jpg.");
 		imwrite(dstname, dstImage);
 
 		vWriter << dstImage;

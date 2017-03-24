@@ -116,15 +116,15 @@ double StitchingInfo::evaluate(const StitchingInfoGroup &group) {
 	if (!StitchingInfo::isSuccess(group)) {
 		return 0.0;
 	} else {
-		double sum_val = 0.0;
-		for (StitchingInfo sinfo:group) sum_val += sinfo.evaluate();
-		return sum_val/group.size();
+		double sum_val = 1.0;
+		for (StitchingInfo sinfo:group) sum_val *= sinfo.evaluate();
+		return pow(sum_val,1.0/group.size());
 	}
 }
 
 
-int LocalStitchingInfoGroup::push_back(StitchingInfoGroup g) {
-	if (endIdx-startIdx<=wSize*2) {
+int LocalStitchingInfoGroup::push_back(StitchingInfoGroup& g) {
+	if (endIdx-startIdx<=wSize+1) {
 		groups[endIdx] = std::make_pair(g, StitchingInfo::evaluate(g));
 		endIdx++;
 	} else {
@@ -132,9 +132,12 @@ int LocalStitchingInfoGroup::push_back(StitchingInfoGroup g) {
 		endIdx++;
 		startIdx++;
 	}
-	if (groups.size()>=wSize*4)
-		for (int i=endIdx-wSize*4; i<startIdx; ++i)
+	if (groups.size()>=wSize+5) {
+		LOG_MESS("LSIG: Starting releasing groups, cur Size: " << groups.size());
+		for (int i=endIdx-wSize*2; i<startIdx; ++i)
 			groups.erase(i);
+		LOG_MESS("LSIG: Done releasing. Size: " << groups.size());
+	}
 	return startIdx;
 }
 
@@ -246,9 +249,12 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 		tmpV.push_back(m.clone());
 	}
 	stitchingWaitingBuff[fidx] = tmpV;
-	if (stitchingWaitingBuff.size() > wSize*4)
-		for (int i=fidx-wSize*4; i<=fidx-wSize*2; ++i)
+	if (stitchingWaitingBuff.size() > wSize+5) {
+		LOG_MESS("LSIG: Starting releasing stitchingWaitingBuff, cur Size: " << stitchingWaitingBuff.size());
+		for (int i=fidx-(wSize+10); i<=fidx-(wSize+1); ++i)
 			stitchingWaitingBuff.erase(i);
+		LOG_MESS("LSIG: Done releasing. Size: " << stitchingWaitingBuff.size());
+	}
 }
 
 bool StitchingInfo::setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &_cameras) {
@@ -301,7 +307,7 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 			resultRoisUsedFrameCur = resultRoisUsedFrameBase;
 			// calc resultRois
 			Mat dummydst;
-			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil().createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
 			StitchingInfoGroup out;
 #ifdef TRY_CATCH
 			try {
@@ -336,7 +342,7 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 				<< " to" << vec2str(v));
 			resultRoisUsedFrameCur = tmp;
 			Mat dummydst;
-			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil().createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
 			StitchingInfoGroup out;
 #ifdef TRY_CATCH
 			try {
@@ -355,18 +361,47 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 			assert(out.size() == resultRoisBase.size());
 			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
 			for (int i=0; i<out.size(); ++i) {
-				group[i].pltHelpers.clear();
-				assert(out[i].resultRois.size() == resultRoisBase.size());
+				assert(out[i].resultRois.size() == resultRoisBase[i].size());
+				group[i].pltHelpers.clear(); group[i].pltHelpers.resize(out[i].resultRois.size());
+				pltHelperGroup[i].clear(); pltHelperGroup[i].resize(out[i].resultRois.size());
+				std::vector<std::vector<std::pair<int,supp::ResultRoi>>> tmpV1(group[i].imgCnt), tmpV2(group[i].imgCnt);
 				for (int j=0; j<out[i].resultRois.size(); ++j) {
-					//LOG_MESS("resultRoisBase: " <<  resultRoisBase[i][j].roi );
-					//LOG_MESS("out: " <<  out[i].resultRois[j].roi );
-					supp::PlaneLinearTransformHelper plt = supp::PlaneLinearTransformHelper::calcPLT(
-						resultRoisBase[i][j].roi,out[i].resultRois[j].roi);
-					group[i].pltHelpers.push_back(plt);
-					pltHelperGroup[i].push_back(plt);
-					//LOG_MESS("plt: " << plt.ax << ","<< plt.bx << ","<< plt.ay << ","<< plt.by  );
-					//system("pause");
+					tmpV2[out[i].resultRois[j].imgIdx].push_back(std::make_pair(j,out[i].resultRois[j]));
+					tmpV1[resultRoisBase[i][j].imgIdx].push_back(std::make_pair(j,resultRoisBase[i][j]));
 				}
+				for (int j=0; j<tmpV1[0].size(); ++j) {
+					// We assume that the imgIdx increases from left to right
+					Point2i tl1 = tmpV1[0][j].second.roi.tl(), br1=tmpV1[group[i].imgCnt-1][j].second.roi.br();
+					Point2i tl2 = tmpV2[0][j].second.roi.tl(), br2=tmpV2[group[i].imgCnt-1][j].second.roi.br();
+					for (int ic = 1; ic<group[i].imgCnt; ++ic) {
+						tl1.x = min(tl1.x, tmpV1[ic][j].second.roi.tl().x);
+						tl1.y = min(tl1.y, tmpV1[ic][j].second.roi.tl().y);
+						br1.x = max(br1.x, tmpV1[ic][j].second.roi.br().x);
+						br1.y = max(br1.y, tmpV1[ic][j].second.roi.br().y);
+
+						tl2.x = min(tl2.x, tmpV2[ic][j].second.roi.tl().x);
+						tl2.y = min(tl2.y, tmpV2[ic][j].second.roi.tl().y);
+						br2.x = max(br2.x, tmpV2[ic][j].second.roi.br().x);
+						br2.y = max(br2.y, tmpV2[ic][j].second.roi.br().y);
+					}
+
+					auto plt = supp::PlaneLinearTransformHelper::calcPLT(
+						Rect(tl1, br1),Rect(tl2,br2));
+					for (int ic=0; ic<group[i].imgCnt; ++ic) {
+						group[i].pltHelpers[tmpV2[ic][j].first] = plt;
+						pltHelperGroup[i][tmpV2[ic][j].first] = plt;
+					}
+
+				}
+
+
+				//for (int j=0; j<out[i].resultRois.size(); ++j) {
+				//	//LOG_MESS("resultRoisBase: " <<  resultRoisBase[i][j].roi );
+				//	//LOG_MESS("out: " <<  out[i].resultRois[j].roi );
+				//	auto plt = group[i].pltHelpers[j];
+				//	LOG_MESS("plt: " << plt.ax << ","<< plt.bx << ","<< plt.ay << ","<< plt.by  );
+				//	system("pause");
+				//}
 			}
 
 		}

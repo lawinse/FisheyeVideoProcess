@@ -10,10 +10,11 @@ namespace supp{
 	struct ResultRoi {
 			Size srcSz;
 			Rect roi;
-			ResultRoi(Size _sz, Rect _roi):srcSz(_sz),roi(_roi){};
+			int imgIdx;
+			ResultRoi(Size _sz, Rect _roi, int _iid):srcSz(_sz),roi(_roi),imgIdx(_iid){};
 		};
 	struct PlaneLinearTransformHelper {
-#define PLT_ADJUST_TYPE 0	//0->BOTH, 1->X_AXIS, 2->Y_AXIS
+#define PLT_ADJUST_TYPE 0	//0->BOTH, 1->X_AXIS, 2->Y_AXIS 3->ONLY_SCALE
 		float ax,bx,ay,by;
 		PlaneLinearTransformHelper(float _ax=1.0, float _bx=0.0, float _ay=1.0, float _by=0.0)
 			:ax(_ax), ay(_ay), bx(_bx), by(_by) {};
@@ -30,13 +31,13 @@ namespace supp{
 			bx = rectBase.x - rectIn.x*ax;
 			by = rectBase.y - rectIn.y*ay;
 	#if PLT_ADJUST_TYPE == 0
-			return PlaneLinearTransformHelper(1,100,1,-200);
+			return PlaneLinearTransformHelper(ax,bx,ay,by);
 	#elif PLT_ADJUST_TYPE == 1
 			return PlaneLinearTransformHelper(ax,bx,1,0);
 	#elif PLT_ADJUST_TYPE == 2
 			return PlaneLinearTransformHelper(1,0,ay,by);
-	#else
-			return PPlaneLinearTransformHelper();
+	#elif PLT_ADJUST_TYPE == 3
+			return PlaneLinearTransformHelper(ax,0,ay,0);
 	#endif
 		}
 		bool operator == (const PlaneLinearTransformHelper &obj) const {
@@ -121,12 +122,15 @@ namespace supp{
 
 	template <class P>
 	class RewarpableRotationWarperBase : public cv::detail::RotationWarperBase<P> {
+	private:
+		int curImageIdx;
 	public:
 		std::vector<ResultRoi> resultRoiData;
+		void setCurrentImageIdx(int _idx) {curImageIdx = _idx;}
 
 		std::vector<PlaneLinearTransformHelper> plts;
 		int curBuildMapsTime;
-		RewarpableRotationWarperBase():curBuildMapsTime(INT_MAX){}
+		RewarpableRotationWarperBase():curBuildMapsTime(INT_MAX),curImageIdx(-1){}
 
 		void setPLTs(std::vector<PlaneLinearTransformHelper>& _plts) {plts.assign(_plts.begin(), _plts.end());curBuildMapsTime = 0;}
 
@@ -154,7 +158,7 @@ namespace supp{
 				curBuildMapsTime++;
 			}
 			RotationWarperBase<P>::detectResultRoi(src_size, dst_tl, dst_br);
-			resultRoiData.push_back(ResultRoi(src_size,Rect(dst_tl, dst_br)));
+			resultRoiData.push_back(ResultRoi(src_size,Rect(dst_tl, dst_br),curImageIdx));
 		}
 		void detectResultRoiByBorder(Size src_size, Point &dst_tl, Point &dst_br) {
 			if (curBuildMapsTime < plts.size()) {
@@ -163,8 +167,10 @@ namespace supp{
 				curBuildMapsTime++;
 			}
 			RotationWarperBase<P>::detectResultRoiByBorder(src_size, dst_tl, dst_br);
-			resultRoiData.push_back(ResultRoi(src_size,Rect(dst_tl, dst_br)));
+			resultRoiData.push_back(ResultRoi(src_size,Rect(dst_tl, dst_br),curImageIdx));
 		}
+
+
 	};
 
 

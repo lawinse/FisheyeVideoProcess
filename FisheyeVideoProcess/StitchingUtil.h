@@ -107,8 +107,8 @@ public:
 };
 
 class LocalStitchingInfoGroup {
-	#define LSIG_WINDOW_SIZE 10
-	#define LSIG_BEST_NONBLACK_NUM 5
+	#define LSIG_WINDOW_SIZE 30
+	#define LSIG_BEST_NONBLACK_NUM 1
 	#define LSIG_SELECT_NUM 1
 	#define LSTG_MAX_STITCHED_BUFF_SIZE 3
 	int wSize;
@@ -132,7 +132,7 @@ public:
 	int getEndIdx() const {return endIdx;}
 	bool cover(int l, int r) {return startIdx <= l && endIdx >= r;}
 	bool empty() const {return endIdx-startIdx == 0;}
-	int push_back(StitchingInfoGroup g);
+	int push_back(StitchingInfoGroup& g);
 	void addToWaitingBuff(int fidx, std::vector<Mat>&);
 	bool getFromWaitingBuff(int fidx, std::vector<Mat>& v) {
 		auto ret = stitchingWaitingBuff.find(fidx);
@@ -160,8 +160,8 @@ private:
 	#define kFlannMaxDistScale 3
 	#define kFlannMaxDistThreshold 0.04
 	#define kFlannNumTrees 4 // by default
-	#define defaultMaskRatio std::make_pair(0.25,0.8) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
-	#define OVERLAP_RATIO_DOUBLESIDE 0.25
+	#define OVERLAP_RATIO_DOUBLESIDE 0.20
+	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
 	#define BLACK_TOLERANCE 3
 	#define NONBLACK_REMAIN_FLOOR 0.70
