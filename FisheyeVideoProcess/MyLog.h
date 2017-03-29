@@ -1,7 +1,7 @@
 #pragma once
 #include <sstream>
 #include <time.h>
-#define LOG_PATH ".\\Logs\\"
+#include "Config.h"
 #define NEED_LOG
 extern std::string runtimeHashCode;
 extern std::stringstream sslog;
@@ -24,9 +24,9 @@ extern FILE *fplog;
 		std::cout << "[Warning] " << msg << std::endl;\
 		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".warn"));}
 
-	#define LOG_MESS(msg)                     \
+	#define LOG_MESS(msg)          {          \
 		std::cout << "[Message] " << msg << std::endl;\
-		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".mess"));
+		WRITE_LOG(msg<<std::endl,(LOG_PATH+runtimeHashCode+(std::string)".mess"));}
 
 	#define LOG_MARK(msg)         {            \
 		std::cout << ">>>>> " << msg << std::endl;\

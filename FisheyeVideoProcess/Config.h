@@ -12,7 +12,7 @@
 #define RESOURCE_PATH ".\\Resources\\"
 #define OUTPUT_PATH ".\\Outputs\\"
 #define TEMP_PATH ".\\Temp\\"
-
+#define LOG_PATH ".\\Logs\\"
 
 
 #define OPENCV_3

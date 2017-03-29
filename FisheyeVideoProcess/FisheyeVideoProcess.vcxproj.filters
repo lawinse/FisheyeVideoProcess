@@ -33,9 +33,6 @@
     <ClInclude Include="MyLog.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="ImageUtil.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="TestCase.h">
       <Filter>源文件</Filter>
     </ClInclude>
@@ -43,6 +40,15 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Supplements\Matchers.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="OtherUtils\ImageUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="OtherUtils\FileUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="OtherUtils\IntervalBestValueMaintainer.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -69,6 +75,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="Supplements\Matchers.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="OtherUtils\FileUtil.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,15 +1,20 @@
 #include "Processor.h"
 #include "CorrectingUtil.h"
-#include "ImageUtil.h"
+#include "OtherUtils\ImageUtil.h"
+#include "OtherUtils\FileUtil.h"
 
 Processor::Processor(LocalStitchingInfoGroup *_pLSIG) {
+	FileUtil::findOrCreateAllDirsNeeded();
 	correctingUtil = CorrectingUtil();
 	stitchingUtil = StitchingUtil();
 	pLSIG = _pLSIG;
 	curStitchingIdx = 0;
+	inputFisheyeResize = INPUT_FISHEYE_RESIZE;
+	dstPanoSize = OUTPUT_PANO_SIZE;
 }
 
 Processor::~Processor() {
+	FileUtil::deleteAllTemp();
 }
 
 void Processor::calculateWind(int fidx, int &lidx, int &ridx) {
@@ -19,25 +24,22 @@ void Processor::calculateWind(int fidx, int &lidx, int &ridx) {
 }
 
 
-void Processor::findFisheyeCircleRegion() {
+void Processor::findFisheyeCircleRegion(Mat &frm) {
 	// TOSOLVE: Simplest estimation,
 	// but in fact circle region may move slightly from time to time
-	radiusOfCircle = (int)round(vCapture[0].get(CV_CAP_PROP_FRAME_HEIGHT)/2);
+	radiusOfCircle = (int)round(frm.size().height/2);
 	centerOfCircleBeforeResz.y = radiusOfCircle;
-	centerOfCircleBeforeResz.x = (int)round(vCapture[0].get(CV_CAP_PROP_FRAME_WIDTH)/2);
+	centerOfCircleBeforeResz.x = (int)round(frm.size().width/2);
 }
 
 void Processor::setPaths(std::string inputPaths[], int inputCnt, std::string outputPath) {
 	for (int i=0; i<inputCnt; ++i) vCapture[i].open(inputPaths[i]);
 	assert(camCnt == inputCnt);
 	
-	// Currently assumes every len has the same situation
-	// that the height(col) of video frame indicates d of circle region
-	findFisheyeCircleRegion();
 	
 	vWriter = VideoWriter(
 		outputPath, CV_FOURCC('D', 'I', 'V', 'X'),
-		fps = vCapture[0].get(CV_CAP_PROP_FPS), dstPanoSize=Size(radiusOfCircle*4,radiusOfCircle*2));
+		fps = vCapture[0].get(CV_CAP_PROP_FPS), dstPanoSize);
 
 	std::cout << "[BASIC INFO]" << std::endl;
 	std::cout << "INPUT: (FPS=" << fps << ")" <<  std::endl;
@@ -80,7 +82,7 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 				sInfoGIN,
 				sp,
 				sType);
-		pLSIG->push_back(sInfoGOUT);
+		pLSIG->push_back(frameIdx,sInfoGOUT);
 #ifdef TRY_CATCH
 	} catch(cv::Exception e) {
 		pLSIG->push_back(sInfoGOUT);
@@ -91,7 +93,8 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 	int leftIdx, rightIdx;
 	calculateWind(curStitchingIdx, leftIdx, rightIdx);
 	if  (!pLSIG->cover(leftIdx, rightIdx)) {
-		LOG_WARN("StitchingBuff does not cover the need. Required:" <<leftIdx<<"-"<<rightIdx << ", current last:" << pLSIG->getEndIdx());
+		LOG_WARN("StitchingBuff does not cover the need. Required:" <<leftIdx<<"-"<<rightIdx <<\
+			", Current:" << pLSIG->getCovered().first << "-" << pLSIG->getCovered().second);
 		return false;
 	} else {
 		std::vector<int> selFrame;
@@ -119,7 +122,7 @@ void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	Mat tmp, tmp2;
 	tmp = srcImage.clone();
 	// USM
-	ImageUtil::_resize_(tmp, tmp, dstPanoSize,0,0);
+	ImageUtil::resize(tmp, tmp, dstPanoSize,0,0);
 	ImageUtil::USM(tmp,tmp);
 	//ImageUtil::LaplaceEnhannce(tmp,tmp);
 	dstImage = tmp.clone();
@@ -150,15 +153,16 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			for (int i=0; i<camCnt; ++i) {
 				vCapture[i] >> tmpFrms[i];
 				if (tmpFrms[i].empty()) break;
+				preProcess(tmpFrms[i], tmpFrms[i]);
 		
-				/* Resize to square frame */
+				/* Restrict to square frame */
 				srcFrms[i] = tmpFrms[i](
 					/* row */
 					Range(centerOfCircleBeforeResz.y-radiusOfCircle, centerOfCircleBeforeResz.y+radiusOfCircle),
 					/* col */
 					Range(centerOfCircleBeforeResz.x-radiusOfCircle, centerOfCircleBeforeResz.x+radiusOfCircle))
 					.clone();	// must use clone()
-			
+		
 			
 				dstFrms[i].create(srcFrms[i].rows, srcFrms[i].cols, srcFrms[i].type());
 			}
@@ -172,8 +176,9 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			}
 			std::cout << "\tCorrecting ..." <<std::endl;
 			for (int i=0; i<camCnt; ++i) {
+				/*blackenOutsideRegion(srcFrms[i]);*/
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
-				//ImageUtil::_resize_(dstFrms[i], dstFrms[i], Size(1000,1000));
+				
 			}
 			std::cout << "\tStitching ..." <<std::endl;
 			panoStitch(dstFrms, fIndex);
@@ -202,7 +207,7 @@ void Processor::persistPano(bool isFlush) {
 				
 #ifdef SHOW_IMAGE
 		Mat forshow;
-		ImageUtil::_resize_(dstImage, forshow, Size(1400, 700));
+		ImageUtil::resize(dstImage, forshow, Size(1400, 700));
 		imshow("windows11",forshow);
 		cvWaitKey();
 #endif
@@ -215,4 +220,23 @@ void Processor::persistPano(bool isFlush) {
 		vWriter << dstImage;
 	}
 	pLSIG->clearStitchedBuff();
+}
+
+void Processor::preProcess(Mat &src, Mat &dst) {
+	static bool isFoundFisheyeRegion = false;
+	ImageUtil::resize(src, dst, inputFisheyeResize);
+	if (!isFoundFisheyeRegion) {
+		findFisheyeCircleRegion(dst);
+		isFoundFisheyeRegion = true;
+	}
+}
+
+void Processor::blackenOutsideRegion(Mat &src) {
+	Mat_<Vec3b> tmpSrc =src;
+	for (int i=0; i<tmpSrc.size().width; ++i) 
+		for (int j=0; j<tmpSrc.size().height; ++j) {
+			if (square(i-centerOfCircleAfterResz.x) + square(j-centerOfCircleAfterResz.y) > square(radiusOfCircle)*1.01)
+				tmpSrc(Point(i,j)) = Vec3b(0,0,0);
+		}
+
 }

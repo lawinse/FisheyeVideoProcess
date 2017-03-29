@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include ".\Supplements\RewarpableWarper.h"
+#include ".\OtherUtils\IntervalBestValueMaintainer.h"
 
 #ifdef OPENCV_3
 	#include<opencv2\stitching.hpp>
@@ -108,13 +109,15 @@ public:
 
 class LocalStitchingInfoGroup {
 	#define LSIG_WINDOW_SIZE 30
-	#define LSIG_BEST_NONBLACK_NUM 1
+	#define LSIG_BEST_CAND_NUM 1
 	#define LSIG_SELECT_NUM 1
-	#define LSTG_MAX_STITCHED_BUFF_SIZE 3
+	#define LSIG_MAX_STITCHED_BUFF_SIZE 3
+	#define LSIG_MAX_WAITING_BUFF_SIZE 10
 	int wSize;
-	int startIdx, endIdx;
-	std::unordered_map<int, std::pair<StitchingInfoGroup,double>> groups;
+	IntervalBestValueMaintainer<StitchingInfoGroup,double> groups;
+	StitchingInfoGroup preSuccessSIG;
 	std::unordered_map<int, std::vector<Mat>> stitchingWaitingBuff;
+	std::unordered_map<int, int> stitchingWaitingBuffPersistedSize;
 	std::vector<std::pair<int, Mat>> stitchedBuff;
 	
 	// For resultRois
@@ -127,25 +130,19 @@ class LocalStitchingInfoGroup {
 
 
 public:
-	LocalStitchingInfoGroup(int _wSize = LSIG_WINDOW_SIZE):wSize(_wSize),startIdx(0),endIdx(0){
+	LocalStitchingInfoGroup(int _wSize = LSIG_WINDOW_SIZE):wSize(_wSize){
+		groups = IntervalBestValueMaintainer<StitchingInfoGroup,double>(
+			int(LSIG_BEST_CAND_NUM),int(LSIG_WINDOW_SIZE),&StitchingInfo::evaluate);
 	}
-	int getEndIdx() const {return endIdx;}
-	bool cover(int l, int r) {return startIdx <= l && endIdx >= r;}
-	bool empty() const {return endIdx-startIdx == 0;}
-	int push_back(StitchingInfoGroup& g);
+	bool cover(int l, int r) {return groups.isCandCovered(l,r);}
+	bool empty() const {return groups.getCandNum() == 0;}
+	std::pair<int,int> getCovered() const {return groups.getRange();}
+	void push_back(int fidx, StitchingInfoGroup& g);
 	void addToWaitingBuff(int fidx, std::vector<Mat>&);
-	bool getFromWaitingBuff(int fidx, std::vector<Mat>& v) {
-		auto ret = stitchingWaitingBuff.find(fidx);
-		if (ret != stitchingWaitingBuff.end()) {
-			v = (*ret).second; return true;
-		} else {
-			LOG_ERR("Cannot find " << fidx << " frame src data.")
-			return false;
-		}
-		
-	}
-	bool isStitchedBuffFull() const {return stitchedBuff.size() >= LSTG_MAX_STITCHED_BUFF_SIZE;}
-	void addToStitchedBuff(int fidx, Mat& m) {stitchedBuff.push_back(std::make_pair(fidx,m.clone()));}
+	bool getFromWaitingBuff(int fidx, std::vector<Mat>& v);
+	void removeFromWaitingBuff(int fidx);
+	bool isStitchedBuffFull() const {return stitchedBuff.size() >= LSIG_MAX_STITCHED_BUFF_SIZE;}
+	void addToStitchedBuff(int fidx, Mat& m);
 	std::vector<std::pair<int, Mat>>* getStitchedBuff() {return &stitchedBuff;}
 	void clearStitchedBuff() {stitchedBuff.clear();}
 	StitchingInfoGroup getAver(int head, int tail, std::vector<int>&, StitchingUtil &);
@@ -168,8 +165,8 @@ private:
 
 	
 	#define FIX_RESIZE_0 Size(1440,1440)
-	#define FIX_RESIZE_1 Size(1050,750)
-	#define FIX_RESIZE_2 Size(800,650)
+	#define FIX_RESIZE_1 Size(2020,1440)
+	#define FIX_RESIZE_2 Size(1750,1440)
 	
 	
 

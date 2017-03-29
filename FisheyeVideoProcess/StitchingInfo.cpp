@@ -1,5 +1,9 @@
 #include "StitchingUtil.h"
-#include "ImageUtil.h"
+#include "OtherUtils\ImageUtil.h"
+#include "OtherUtils\FileUtil.h"
+
+
+
 void StitchingInfo::clear() {
 	imgCnt = 0;
 	ranges.clear();
@@ -123,35 +127,18 @@ double StitchingInfo::evaluate(const StitchingInfoGroup &group) {
 }
 
 
-int LocalStitchingInfoGroup::push_back(StitchingInfoGroup& g) {
-	if (endIdx-startIdx<=wSize+1) {
-		groups[endIdx] = std::make_pair(g, StitchingInfo::evaluate(g));
-		endIdx++;
-	} else {
-		groups[endIdx] = std::make_pair(g, StitchingInfo::evaluate(g));
-		endIdx++;
-		startIdx++;
-	}
-	if (groups.size()>=wSize+5) {
-		LOG_MESS("LSIG: Starting releasing groups, cur Size: " << groups.size());
-		for (int i=endIdx-wSize*2; i<startIdx; ++i)
-			groups.erase(i);
-		LOG_MESS("LSIG: Done releasing. Size: " << groups.size());
-	}
-	return startIdx;
+void LocalStitchingInfoGroup::push_back(int fidx, StitchingInfoGroup& g) {
+	groups.addCandidate(fidx, g);
 }
 
 StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vector<int> &selectedFrameIdx, StitchingUtil &stitchingUtil) {
-	std::vector<std::pair<int,double>> tmp(tail-head);
-	for (int i=0; i<tmp.size(); ++i) {tmp[i] = std::make_pair(head + i, groups[head+i].second);}
-	std::sort(tmp.begin(), tmp.end(),
-		[](const std::pair<int,double> &a, const std::pair<int,double> &b) {return a.second>b.second;});
-	int r = LSIG_BEST_NONBLACK_NUM-1;
+	std::vector<std::pair<int,double>> tmp = groups.getBestIdx(head, tail);
+	int r = tmp.size()-1;
 	for (;r>=0 && tmp[r].second == 0;--r);
 	if (r < 0) {LOG_ERR("The local stitching info is entirely bad.");}
 	++r;
 
-#define GET_GROUP(i) (groups[tmp[i].first].first)
+#define GET_GROUP(i) (groups[tmp[i].first])
 	// Using the middle scale ones
 	if (r > LSIG_SELECT_NUM) {
 		for (int i=0; i<r; ++i) {
@@ -176,87 +163,122 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	selectedFrameIdx.clear();
 	for (int i=0; i<r; ++i) selectedFrameIdx.push_back(tmp[i].first);
 
-
-	StitchingInfoGroup ret(GET_GROUP(0).size());
+	if (selectedFrameIdx.empty() || !resultRoisUsedFrameCur.empty() && std::unordered_set<int>(selectedFrameIdx.begin(), selectedFrameIdx.end()) == resultRoisUsedFrameCur) {
+		LOG_MESS("LSIG: Reuse former SIG, since current selectedFrame is" << vec2str(selectedFrameIdx));
+		selectedFrameIdx = std::vector<int>(resultRoisUsedFrameCur.begin(), resultRoisUsedFrameCur.end());
+		return preSuccessSIG;
+	} else {
+		StitchingInfoGroup ret(GET_GROUP(0).size());
 	
 
-	for (int j=0; j<ret.size(); ++j) {
-		ret[j].srcType = GET_GROUP(0)[j].srcType;
-		ret[j].imgCnt = GET_GROUP(0)[j].imgCnt;
-		ret[j].maskRatio = GET_GROUP(0)[j].maskRatio;
-		ret[j].cameras = std::vector<cv::detail::CameraParams>(GET_GROUP(0)[j].cameras.size());
-		ret[j].warpData = Mat::zeros(GET_GROUP(0)[j].warpData.size(),GET_GROUP(0)[j].warpData.type());
-		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-			ret[j].cameras[camidx].aspect = 0;
-			ret[j].cameras[camidx].focal = 0;
-			ret[j].cameras[camidx].ppx = 0;
-			ret[j].cameras[camidx].ppy = 0;
-			ret[j].cameras[camidx].R = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].R.size(), GET_GROUP(0)[j].cameras[camidx].R.type());
-			ret[j].cameras[camidx].t = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].t.size(),GET_GROUP(0)[j].cameras[camidx].t.type());
-		}
-		for (int i=0; i<r; ++i) {
-			/*
-			* float warpedImageScale;
-			* Size resizeSz;
-			* std::vector<cv::detail::CameraParams> cameras
-			*/
-			ret[j].resizeSz.width += GET_GROUP(i)[j].resizeSz.width;
-			ret[j].resizeSz.height += GET_GROUP(i)[j].resizeSz.height;
-			ret[j].warpData+= GET_GROUP(i)[j].warpData;
-	
-
+		for (int j=0; j<ret.size(); ++j) {
+			ret[j].srcType = GET_GROUP(0)[j].srcType;
+			ret[j].imgCnt = GET_GROUP(0)[j].imgCnt;
+			ret[j].maskRatio = GET_GROUP(0)[j].maskRatio;
+			ret[j].cameras = std::vector<cv::detail::CameraParams>(GET_GROUP(0)[j].cameras.size());
+			ret[j].warpData = Mat::zeros(GET_GROUP(0)[j].warpData.size(),GET_GROUP(0)[j].warpData.type());
 			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-				ret[j].cameras[camidx].focal += GET_GROUP(i)[j].cameras[camidx].focal;
-				ret[j].cameras[camidx].aspect += GET_GROUP(i)[j].cameras[camidx].aspect;
-				
-				ret[j].cameras[camidx].ppx += GET_GROUP(i)[j].cameras[camidx].ppx;
-				ret[j].cameras[camidx].ppy += GET_GROUP(i)[j].cameras[camidx].ppy;
-				//LOG_ERR(ret[j].cameras[camidx].R.type() << " " << GET_GROUP(i)[j].cameras[camidx].R.type());
-				//LOG_ERR(ret[j].cameras[camidx].t.type() << " " << GET_GROUP(i)[j].cameras[camidx].t.type());
-				ret[j].cameras[camidx].R += GET_GROUP(i)[j].cameras[camidx].R;
-				ret[j].cameras[camidx].t += GET_GROUP(i)[j].cameras[camidx].t;
+				ret[j].cameras[camidx].aspect = 0;
+				ret[j].cameras[camidx].focal = 0;
+				ret[j].cameras[camidx].ppx = 0;
+				ret[j].cameras[camidx].ppy = 0;
+				ret[j].cameras[camidx].R = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].R.size(), GET_GROUP(0)[j].cameras[camidx].R.type());
+				ret[j].cameras[camidx].t = Mat::zeros(GET_GROUP(0)[j].cameras[camidx].t.size(),GET_GROUP(0)[j].cameras[camidx].t.type());
 			}
+			for (int i=0; i<r; ++i) {
+				/*
+				* float warpedImageScale;
+				* Size resizeSz;
+				* std::vector<cv::detail::CameraParams> cameras
+				*/
+				ret[j].resizeSz.width += GET_GROUP(i)[j].resizeSz.width;
+				ret[j].resizeSz.height += GET_GROUP(i)[j].resizeSz.height;
+				ret[j].warpData+= GET_GROUP(i)[j].warpData;
+	
 
+				for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
+					ret[j].cameras[camidx].focal += GET_GROUP(i)[j].cameras[camidx].focal;
+					ret[j].cameras[camidx].aspect += GET_GROUP(i)[j].cameras[camidx].aspect;
+				
+					ret[j].cameras[camidx].ppx += GET_GROUP(i)[j].cameras[camidx].ppx;
+					ret[j].cameras[camidx].ppy += GET_GROUP(i)[j].cameras[camidx].ppy;
+					//LOG_ERR(ret[j].cameras[camidx].R.type() << " " << GET_GROUP(i)[j].cameras[camidx].R.type());
+					//LOG_ERR(ret[j].cameras[camidx].t.type() << " " << GET_GROUP(i)[j].cameras[camidx].t.type());
+					ret[j].cameras[camidx].R += GET_GROUP(i)[j].cameras[camidx].R;
+					ret[j].cameras[camidx].t += GET_GROUP(i)[j].cameras[camidx].t;
+				}
+
+			}
+			ret[j].resizeSz.width /= r;
+			ret[j].resizeSz.height /= r;
+			ret[j].warpData/= r;
+			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
+				ret[j].cameras[camidx].focal /= r;
+				ret[j].cameras[camidx].aspect /= r;
+				ret[j].cameras[camidx].ppx /= r;
+				ret[j].cameras[camidx].ppy /= r;
+				ret[j].cameras[camidx].R /= double(r);
+				ret[j].cameras[camidx].t /= double(r);
+			}
+			//for (int i=0; i<ret[j].warpData.size(); ++i) {
+			//	LOG_MESS(vec2str(ret[j].warpData[i]));
+			//}
+			//LOG_MESS("at getAver()");
+			//system("pause");
 		}
-		ret[j].resizeSz.width /= r;
-		ret[j].resizeSz.height /= r;
-		ret[j].warpData/= r;
-		for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-			ret[j].cameras[camidx].focal /= r;
-			ret[j].cameras[camidx].aspect /= r;
-			ret[j].cameras[camidx].ppx /= r;
-			ret[j].cameras[camidx].ppy /= r;
-			ret[j].cameras[camidx].R /= double(r);
-			ret[j].cameras[camidx].t /= double(r);
-		}
-		//for (int i=0; i<ret[j].warpData.size(); ++i) {
-		//	LOG_MESS(vec2str(ret[j].warpData[i]));
-		//}
-		//LOG_MESS("at getAver()");
-		//system("pause");
+
+		// Adjust the PLT for StitchingInfoGroup
+		adjustPltForLSIG(ret, selectedFrameIdx, stitchingUtil);
+
+		return preSuccessSIG=ret;
 	}
-
-	// Adjust the PLT for StitchingInfoGroup
-	adjustPltForLSIG(ret, selectedFrameIdx, stitchingUtil);
-
-	return ret;
 
 }
 
 void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 	std::vector<Mat> tmpV;
-	for (Mat m:v) {
-		tmpV.push_back(m.clone());
-	}
-	stitchingWaitingBuff[fidx] = tmpV;
+	for (Mat m:v) tmpV.push_back(m.clone());
+
+	if (stitchingWaitingBuff.size() >= LSIG_MAX_WAITING_BUFF_SIZE) {
+		stitchingWaitingBuffPersistedSize[fidx] = tmpV.size();
+		FileUtil::persistMats(fidx, tmpV);
+	} else
+		stitchingWaitingBuff[fidx] = tmpV;
+
 	if (stitchingWaitingBuff.size() > wSize+5) {
-		LOG_MESS("LSIG: Starting releasing stitchingWaitingBuff, cur Size: " << stitchingWaitingBuff.size());
+		LOG_MESS("LSIG: Starting releasing stitchingWaitingBuff, cur Size: "\
+			<< stitchingWaitingBuff.size()+stitchingWaitingBuffPersistedSize.size());
 		for (int i=fidx-(wSize+10); i<=fidx-(wSize+1); ++i)
-			stitchingWaitingBuff.erase(i);
-		LOG_MESS("LSIG: Done releasing. Size: " << stitchingWaitingBuff.size());
+			removeFromWaitingBuff(i);
+		LOG_MESS("LSIG: Done releasing. Size: "\
+			<< stitchingWaitingBuff.size()+stitchingWaitingBuffPersistedSize.size());
 	}
 }
 
+bool LocalStitchingInfoGroup::getFromWaitingBuff(int fidx, std::vector<Mat>& v) {
+	auto ret = stitchingWaitingBuff.find(fidx);
+	auto ret1 = stitchingWaitingBuffPersistedSize.find(fidx);
+	if (ret != stitchingWaitingBuff.end()) {
+		v = (*ret).second; return true;
+	} else if (ret1 != stitchingWaitingBuffPersistedSize.end()) {
+		int sz = (*ret1).second;
+		v = FileUtil::loadMats(fidx, sz);
+		return true;
+	} else {
+		LOG_ERR("Cannot find " << fidx << " frame src data.")
+		return false;
+	}
+		
+}
+
+void LocalStitchingInfoGroup::removeFromWaitingBuff(int fidx) {
+	if (stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end())
+		stitchingWaitingBuff.erase(fidx);
+	else if (stitchingWaitingBuffPersistedSize.find(fidx) != stitchingWaitingBuffPersistedSize.end()) {
+		FileUtil::deletePersistedMats(fidx);
+		stitchingWaitingBuffPersistedSize.erase(fidx);
+	}
+}
 bool StitchingInfo::setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &_cameras) {
 	if (_cameras.size() != 0) {LOG_WARN("cameraParams are not null !"); return false;}
 	_cameras.assign(cameras.size(), cv::detail::CameraParams());
@@ -411,4 +433,9 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 	}
 
 
+}
+
+void LocalStitchingInfoGroup::addToStitchedBuff(int fidx, Mat& m) {
+	stitchedBuff.push_back(std::make_pair(fidx,m.clone()));
+	removeFromWaitingBuff(fidx);
 }

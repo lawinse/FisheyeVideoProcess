@@ -83,17 +83,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="OtherUtils\FileUtil.h" />
+    <ClInclude Include="OtherUtils\IntervalBestValueMaintainer.h" />
     <ClInclude Include="Supplements\RewarpableWarper.h" />
     <ClInclude Include="Supplements\Matchers.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="CorrectingUtil.h" />
-    <ClInclude Include="ImageUtil.h" />
+    <ClInclude Include="OtherUtils\ImageUtil.h" />
     <ClInclude Include="MyLog.h" />
     <ClInclude Include="Processor.h" />
     <ClInclude Include="StitchingUtil.h" />
     <ClInclude Include="TestCase.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="OtherUtils\FileUtil.cpp" />
     <ClCompile Include="Supplements\RewarpableWarper.cpp" />
     <ClCompile Include="Supplements\Matchers.cpp" />
     <ClCompile Include="CorrectingUtil.cpp" />

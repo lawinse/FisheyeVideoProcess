@@ -1,5 +1,5 @@
 #include "StitchingUtil.h"
-#include "ImageUtil.h"
+#include "OtherUtils\ImageUtil.h"
 #include <algorithm>
 
 
@@ -393,7 +393,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 		sInfoG.push_back(_stitch(srcs, dstBF, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[1], FIX_RESIZE_0));
 		std::reverse(srcs.begin(), srcs.end());
 		//imshow("BF",dstBF);
-		//imshow("FB",dstFB);
+		//
 		//cvWaitKey();
 
 		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
@@ -509,7 +509,7 @@ void StitchingUtil::showMatchingPair(
 		Mat img_matches;
 		drawMatches(left,kptL, right, kptR, goodMatches, img_matches);
 		Mat forshow;
-		ImageUtil::_resize_(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
+		ImageUtil::resize(img_matches, forshow, Size(img_matches.cols/3, img_matches.rows/3));
 		imshow("MatchSift", forshow);
 		waitKey();
 }

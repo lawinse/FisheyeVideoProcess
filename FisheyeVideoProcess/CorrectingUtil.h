@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Config.h"
-#include <hash_map>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unordered_map>
