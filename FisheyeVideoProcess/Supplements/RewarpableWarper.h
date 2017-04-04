@@ -50,21 +50,21 @@ namespace supp{
 
 // Spherical, Cylinderical, Mercator
 	struct _ProjectorBase : public cv::detail::ProjectorBase {
-	#define PROJ_DATA_TTL_LEN 40
+	#define PROJ_DATA_TTL_LEN 41
 
 		bool b_setAllMatsData;
 		int ttlProjTime;
 		int curProjIdx;
+		int curImageIdx;
 		std::vector<std::vector<float>> projData;
 
 		PlaneLinearTransformHelper pltHelper;
 
 		void autoSaveProjData();
-		void autoSaveMapData();
 		bool isSetAllMatsData() const {return b_setAllMatsData;}
 		void setAllMatsData(bool b) {b_setAllMatsData = b;}
 
-		_ProjectorBase():curProjIdx(0){setAllMatsData(false);}
+		_ProjectorBase():curProjIdx(0),curImageIdx(-1){setAllMatsData(false);}
 
 		_ProjectorBase(std::vector<std::vector<float>> &_data):curProjIdx(0){
 			setAllMatsMultiple(_data);
@@ -85,6 +85,13 @@ namespace supp{
 			pltHelper.transformBackward(x,y,u,v);
 		}
 
+		static void getAverRotationMatrix(std::vector<Mat> &rots, Mat & ret);
+		static std::vector<float> reCalcCameraParamsAndGetAllMats(
+			float scale,
+			InputArray K = Mat::eye(3, 3, CV_32F),
+			InputArray R = Mat::eye(3, 3, CV_32F),
+			InputArray T = Mat::zeros(3, 1, CV_32F),
+			int cImageIdx = -1);
 	
 	};
 
@@ -126,7 +133,7 @@ namespace supp{
 		int curImageIdx;
 	public:
 		std::vector<ResultRoi> resultRoiData;
-		void setCurrentImageIdx(int _idx) {curImageIdx = _idx;}
+		void setCurrentImageIdx(int _idx) {curImageIdx = projector_.curImageIdx = _idx;}
 
 		std::vector<PlaneLinearTransformHelper> plts;
 		int curBuildMapsTime;
@@ -151,6 +158,7 @@ namespace supp{
 		}
 
 		std::vector<ResultRoi> getResultRoiData() {return resultRoiData;}	
+
 	    void detectResultRoi(Size src_size, Point &dst_tl, Point &dst_br) {
 			if (curBuildMapsTime < plts.size()) {
 				//LOG_MESS("RewarpableRotationWarperBase.detectResultRoi: Manually set pltHelper.")
@@ -160,6 +168,7 @@ namespace supp{
 			RotationWarperBase<P>::detectResultRoi(src_size, dst_tl, dst_br);
 			resultRoiData.push_back(ResultRoi(src_size,Rect(dst_tl, dst_br),curImageIdx));
 		}
+
 		void detectResultRoiByBorder(Size src_size, Point &dst_tl, Point &dst_br) {
 			if (curBuildMapsTime < plts.size()) {
 				//LOG_MESS("RewarpableRotationWarperBase.detectResultRoiByBorder: Manually set pltHelper.")
@@ -194,13 +203,9 @@ namespace supp{
 
 			u = scale * atan2f(x_, z_);
 			v = scale * y_ / sqrtf(x_ * x_ + z_ * z_);
-
 			_ProjectorBase::mapForward(u,v,u,v);
-
 		}
-
-
-		 void _CylindricalProjector::mapBackward(float u, float v, float &x, float &y) {
+		inline void _CylindricalProjector::mapBackward(float u, float v, float &x, float &y) {
 			_ProjectorBase::mapBackward(u,v,u,v);
 			u /= scale;
 			v /= scale;
@@ -216,7 +221,6 @@ namespace supp{
 
 			if (z > 0) { x /= z; y /= z; }
 			else x = y = -1;
-			
 		}
 	};
 
@@ -267,9 +271,6 @@ namespace supp{
 			x = k_rinv[0] * x_ + k_rinv[1] * y_ + k_rinv[2] * z_;
 			y = k_rinv[3] * x_ + k_rinv[4] * y_ + k_rinv[5] * z_;
 			z = k_rinv[6] * x_ + k_rinv[7] * y_ + k_rinv[8] * z_;
-
-			if (z > 0) { x /= z; y /= z; }
-			else x = y = -1;
 		}
 	};
 

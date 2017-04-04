@@ -2,8 +2,12 @@
 #include "..\Config.h"
 class ImageUtil {
 public:
-	static void USM(Mat &src, Mat &dst, double amount=1.0, int thres=0, double sigma=3) {
-		Mat blur, tmp2;
+	static void USM(Mat &src, Mat &dst) {
+		Mat blur, tmp2; 
+		double amount=1.0;
+		int thres=0;
+		double sigma=3;
+
 		GaussianBlur(src,blur,Size(),sigma, sigma);
 		Mat lowContratsMask = abs(src-blur)<thres;
 		tmp2 = src*(1+amount)+blur*(-amount);
@@ -32,6 +36,25 @@ public:
 		ImageUtil::resize(img,tmp,Size(img.cols*ratio, img.rows*ratio));
 		cv::imshow(winName, tmp);
 		if (holdon) cvWaitKey();
+	}
+
+	static void equalizeHistBGR(Mat &src, Mat &dst) {
+		if (src.channels()<3) {
+			LOG_WARN("ImageUtil: failed in equalizeHistBGR (less than 3 channels)");
+			dst = src.clone();
+		} else {
+			cvtColor(src, dst, COLOR_BGR2YCrCb);
+			std::vector<Mat> channels;
+			cv::split(dst, channels);
+			cv::equalizeHist(channels[0], channels[0]);
+			cv::merge(channels,dst);
+			cvtColor(dst,dst,COLOR_YCrCb2BGR);
+		}
+	}
+
+	static void batchOperation(std::vector<Mat> &srcs, std::vector<Mat> &dsts, void (*op)(Mat &src, Mat &dst)) {
+		if (dsts.size() != srcs.size()) dsts = std::vector<Mat>(srcs.size());
+		for (int i=0; i<srcs.size(); ++i) op(srcs[i],dsts[i]);
 	}
 
 

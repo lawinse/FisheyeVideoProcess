@@ -34,7 +34,7 @@ private:
 	void preProcess(Mat &src, Mat &dst);
 	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
 	void panoRefine(Mat &, Mat &dstImage);
-	void calculateWind(int fidx, int &lidx, int &ridx);
+	void calculateWinSz(int fidx, int &lidx, int &ridx);
 	void persistPano(bool isFlush = false);
 	void blackenOutsideRegion(Mat &);
 public:

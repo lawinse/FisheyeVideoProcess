@@ -53,6 +53,7 @@ struct OpenCVStitchParam {
 		float match_conf;
 		int blend_type;
 		float blend_strength;
+		bool isRealStitching;
 
 		OpenCVStitchParam() {
 			workMegapix = 0.8;
@@ -63,6 +64,7 @@ struct OpenCVStitchParam {
 			expos_comp_type = cv::detail::ExposureCompensator::GAIN_BLOCKS;
 			match_conf = 0.3f;
 			blend_type = cv::detail::Blender::MULTI_BAND;
+			isRealStitching = true;
 			blend_strength = 5;
 		}
 };
@@ -82,7 +84,7 @@ public:
 	std::pair<double, double> maskRatio;
 	std::vector<Range> ranges;	// only cares width-wise
 	std::vector<cv::detail::CameraParams> cameras;
-	Mat warpData;
+	Mat projData;
 	std::vector<supp::ResultRoi> resultRois;
 	std::vector<supp::PlaneLinearTransformHelper> pltHelpers;
 
@@ -100,19 +102,22 @@ public:
 	float getWarpScale() const;
 	bool setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
 	void setFromCamerasInternalParam(std::vector<cv::detail::CameraParams> &cameras);
-	float getLastScale() const {return warpData.at<float>(warpData.rows-1,0);}
+	float getLastScale() const {return projData.at<float>(projData.rows-1,0);}
 	float getAverFocal() const {return getWarpScale();}
 
 	static bool isSuccess(const StitchingInfoGroup &);
 	static double evaluate(const StitchingInfoGroup &);
+	static void getAvergeProjData(std::vector<Mat> &pDatas, Mat &ret, std::vector<cv::detail::CameraParams> &cams);
+	static void getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs, StitchingInfoGroup &ret);
+	//static MatchesInfo mergeMatchesInfo(MatchesInfo &mi1,MatchesInfo &mi2);
 };
 
 class LocalStitchingInfoGroup {
 	#define LSIG_WINDOW_SIZE 30
 	#define LSIG_BEST_CAND_NUM 1
-	#define LSIG_SELECT_NUM 1
+	#define LSIG_SELECT_NUM LSIG_BEST_CAND_NUM
 	#define LSIG_MAX_STITCHED_BUFF_SIZE 3
-	#define LSIG_MAX_WAITING_BUFF_SIZE 10
+	#define LSIG_MAX_WAITING_BUFF_SIZE 15
 	int wSize;
 	IntervalBestValueMaintainer<StitchingInfoGroup,double> groups;
 	StitchingInfoGroup preSuccessSIG;

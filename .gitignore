@@ -8,10 +8,13 @@ Desktop.ini
 # Recycle Bin used on file shares
 $RECYCLE.BIN/
 
-# Debug,Release
+# Debug,Release,Outputs,Temp,Logs
 Debug/
 Release/
 Resources/
+Logs/
+Outputs/
+Temp/
 
 #ProPS
 *.props

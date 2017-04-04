@@ -8,7 +8,7 @@
 #include <string.h>
 #include "MyLog.h"
 
-#define PI 3.14159265358979323846
+#define PI CV_PI
 #define RESOURCE_PATH ".\\Resources\\"
 #define OUTPUT_PATH ".\\Outputs\\"
 #define TEMP_PATH ".\\Temp\\"

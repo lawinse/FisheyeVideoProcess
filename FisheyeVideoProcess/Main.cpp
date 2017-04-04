@@ -34,7 +34,7 @@ int main(int argc, char ** args) {
 	processor.process(3,0);
 #elif defined(RUN_TEST)
 	TestCase tc;
-	tc.test1();
+	tc.test4();
 	system("pause");
 #endif
 }

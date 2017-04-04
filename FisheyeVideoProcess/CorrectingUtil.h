@@ -131,7 +131,7 @@ struct ReMapping{
 		std::string fname = TEMP_PATH +(std::string)"REMAP";
 		char hash[20];
 		sprintf(hash, "%x", cpHash);
-		fname += (std::string) hash + ".dat";
+		fname += (std::string) hash + ".bin";
 		return fname;
 	}
 

@@ -17,7 +17,7 @@ Processor::~Processor() {
 	FileUtil::deleteAllTemp();
 }
 
-void Processor::calculateWind(int fidx, int &lidx, int &ridx) {
+void Processor::calculateWinSz(int fidx, int &lidx, int &ridx) {
 	lidx = max(0, fidx-LSIG_WINDOW_SIZE/2);
 	ridx = min(ttlFrmsCnt, lidx + LSIG_WINDOW_SIZE);
 	lidx = min(lidx, ridx-LSIG_WINDOW_SIZE);
@@ -72,16 +72,23 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 	stitchingUtil.stitchingType = sType;
 
 	pLSIG->addToWaitingBuff(frameIdx, srcs);
-	std::vector<Mat> vmat;
+	std::vector<Mat> vmat, modifiedSrcs(srcs);
+	//ImageUtil::batchOperation(modifiedSrcs, modifiedSrcs, &ImageUtil::equalizeHistBGR);
 	Mat dummy, tmpDst;
+	int leftIdx, rightIdx;
+	calculateWinSz(curStitchingIdx, leftIdx, rightIdx);
 #ifdef TRY_CATCH
 	try {
 #endif
-		sInfoGOUT = stitchingUtil.doStitch(
-				srcs, dummy, 
-				sInfoGIN,
-				sp,
-				sType);
+		stitchingUtil.osParam.isRealStitching = false;
+		if (!pLSIG->cover(leftIdx, rightIdx)) {
+			sInfoGOUT = stitchingUtil.doStitch(
+					modifiedSrcs, dummy, 
+					sInfoGIN,
+					sp,
+					sType);
+		}
+
 		pLSIG->push_back(frameIdx,sInfoGOUT);
 #ifdef TRY_CATCH
 	} catch(cv::Exception e) {
@@ -90,14 +97,14 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 	}
 #endif
 
-	int leftIdx, rightIdx;
-	calculateWind(curStitchingIdx, leftIdx, rightIdx);
+	calculateWinSz(curStitchingIdx, leftIdx, rightIdx);
 	if  (!pLSIG->cover(leftIdx, rightIdx)) {
 		LOG_WARN("StitchingBuff does not cover the need. Required:" <<leftIdx<<"-"<<rightIdx <<\
 			", Current:" << pLSIG->getCovered().first << "-" << pLSIG->getCovered().second);
 		return false;
 	} else {
 		std::vector<int> selFrame;
+		stitchingUtil.osParam.isRealStitching = true;
 		do {
 			bool b = pLSIG->getFromWaitingBuff(curStitchingIdx, vmat);
 			assert(b);
@@ -112,8 +119,9 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 			pLSIG->addToStitchedBuff(curStitchingIdx, tmpDst);
 			LOG_MARK("Done stitching " << curStitchingIdx << " frame.");
 			persistPano();
-			calculateWind(++curStitchingIdx, leftIdx, rightIdx);
-		} while(curStitchingIdx<ttlFrmsCnt && pLSIG->cover(leftIdx, rightIdx));
+			calculateWinSz(++curStitchingIdx, leftIdx, rightIdx);
+		} while(curStitchingIdx<ttlFrmsCnt
+			&& pLSIG->cover(leftIdx, rightIdx));
 		return true;
 	}
 }

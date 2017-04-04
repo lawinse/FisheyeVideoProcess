@@ -385,7 +385,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 		sInfoG.push_back(_stitch(tmpSrc, dstImage, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0], Size(), std::make_pair(1.0,0.7)));
 	} else if (sp == STITCH_DOUBLE_SIDE){
 		Mat dstBF, dstFB;
-		StitchingUtil::osParam.blend_strength = 4;
+		StitchingUtil::osParam.blend_strength = 5;
 		assert(sInfoGNotNull.empty() || sInfoGNotNull.size() == 4);
 		sInfoG.push_back(_stitch(srcs, dstFB, sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[0],FIX_RESIZE_0));
 		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
@@ -418,7 +418,7 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 				.clone());
 
 		// dstTmp: F-B-F
-		StitchingUtil::osParam.blend_strength = 0;
+		StitchingUtil::osParam.blend_strength = 1;
 		sInfoG.push_back(_stitch(tmpSrc,dstTmp,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[2], FIX_RESIZE_1,std::make_pair(overlapRatio_tolerance,0.7)));	
 		//imshow("FBF",dstTmp);
 		//cvWaitKey();

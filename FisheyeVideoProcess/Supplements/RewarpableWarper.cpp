@@ -60,7 +60,16 @@ std::vector<float> _ProjectorBase::getAllMats() {
 	for (int i=0; i<9; ++i) ret.push_back(r_kinv[i]);
 	for (int i=0; i<9; ++i) ret.push_back(k_rinv[i]);
 	for (int i=0; i<3; ++i) ret.push_back(t[i]);
+	ret.push_back(curImageIdx);
 	return ret;
+}
+
+std::vector<float> _ProjectorBase::reCalcCameraParamsAndGetAllMats(float _scale, InputArray K, InputArray R, InputArray T, int cImageIdx) {
+	_ProjectorBase pb;
+	pb.scale = _scale;
+	pb.curImageIdx = cImageIdx;
+	pb.setCameraParams(K,R,T);
+	return pb.getAllMats();
 }
 
 
@@ -122,4 +131,52 @@ Point RewarpableCylindricalWarper::warp(InputArray src, InputArray K, InputArray
 	remap(src, dst, uxmap, uymap, interp_mode, border_mode);
 
 	return dst_roi.tl();
+}
+
+void _ProjectorBase::getAverRotationMatrix(std::vector<Mat> &rots, Mat & ret) {
+	Size inputSize = rots[0].size();
+	Mat tmpRot;
+	double ttlthetaz=0, ttlthetay=0, ttlthetax=0;
+	int cnt = 0;
+	if (inputSize.area() == 9) {
+		for (int i=0; i<rots.size(); ++i) {
+			tmpRot = rots[i].clone().reshape(0,3);
+			Mat_<float> it = tmpRot;
+			double thetaz = atan2(it(1,0), it(0,0));
+			double thetay = atan2(-1 * it(2,0), sqrt(it(2,1)*it(2,1) + it(2,2)*it(2,2)));
+			double thetax = atan2(it(2,1), it(2,2));
+			if (fabs (thetay) > (M_PI/2.0-ERR)) {
+				LOG_ERR("_ProjectorBase: Pitch(Y) axis is paralleled to others. Couldn't solve." << rots[i]);
+				continue;
+			}
+			cnt++;
+			ttlthetaz+=thetaz, ttlthetay+=thetay, ttlthetax+=thetax;
+		}
+		if (cnt > 0) {
+			ttlthetax/=cnt;
+			ttlthetay/=cnt;
+			ttlthetaz/=cnt;
+			//Mat rotx = (Mat_<float>(3,3)<<1.0,0.0,0.0,0.0,cos(ttlthetax),-sin(ttlthetax),0.0,sin(ttlthetax),cos(ttlthetax));
+			//Mat roty = (Mat_<float>(3,3)<<cos(ttlthetay),0.0,sin(ttlthetay),0.0,1.0,0.0,-sin(ttlthetay),0.0,cos(ttlthetay));
+			//Mat rotz = (Mat_<float>(3,3)<<cos(ttlthetaz),-sin(ttlthetaz),0.0,sin(ttlthetaz),cos(ttlthetaz),0.0,0.0,0.0,1.0);
+			//ret = rotz*roty*rotx;
+			double ca1,cb1,cc1,sa1,sb1,sc1;
+			ca1 = cos(ttlthetaz); sa1 = sin(ttlthetaz);
+			cb1 = cos(ttlthetay); sb1 = sin(ttlthetay);
+			cc1 = cos(ttlthetax); sc1 = sin(ttlthetax);
+			tmpRot = (Mat_<double>(3,3)<<\
+				ca1*cb1,	ca1*sb1*sc1 - sa1*cc1,	ca1*sb1*cc1 + sa1*sc1,\
+				sa1*cb1,	sa1*sb1*sc1 + ca1*cc1,	sa1*sb1*cc1 - ca1*sc1,\
+				-sb1,		cb1*sc1,				cb1*cc1);
+			tmpRot.convertTo(tmpRot, rots[0].type());
+			ret = tmpRot.reshape(0,rots[0].rows);
+		} else {
+			ret = rots[0].clone();
+		}
+	} else {
+		LOG_ERR("_ProjectorBase: Wrong Size of Rotation matirx when averaging (not area 9).");
+		ret = rots[0].clone();
+	}
+
+
 }

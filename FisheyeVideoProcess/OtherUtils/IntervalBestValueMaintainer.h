@@ -9,6 +9,7 @@ private:
 	
 	int bestNum;
 	int intervalLen;
+	bool isMonoQueue;
 	ValueType (*getValue)(const ItemType &) ;
 
 public:
@@ -17,6 +18,7 @@ public:
 		storage.clear();
 		idxMap.clear();
 		getValue = gv;
+		isMonoQueue = (bestNum==1);
 	}
 	int getCandNum() const {return range.second - range.first;}
 	std::pair<int,int> getRange() const {return range;}
@@ -51,23 +53,34 @@ public:
 			LOG_ERR(this);
 			return false;
 		}
-		if (idxMap.size() < bestNum) {
-			// Add new candidates
-			storage.push_back(std::make_pair(std::make_pair(g, getValue(g)),fidx));
+
+		if (isMonoQueue) {
+			ValueType val = getValue(g);
+			while(storage.size() && storage.back().first.second <= val) {
+				idxMap.erase(storage.back().second);
+				storage.pop_back();
+			}
+			storage.push_back(std::make_pair(std::make_pair(g, val),fidx));
 			idxMap[fidx] = --(storage.end());
 		} else {
-			// 1) Add new candidates
-			ValueType val = getValue(g);
-			for (auto it = storage.begin(); it != storage.end(); ++it) {
-				if ((*it).first.second < val) {
-					idxMap[fidx] = storage.insert(it, std::make_pair(std::make_pair(g, val), fidx));
-					break;
+			if (idxMap.empty()) {
+				// Add new candidates
+				storage.push_back(std::make_pair(std::make_pair(g, getValue(g)),fidx));
+				idxMap[fidx] = --(storage.end());
+			} else {
+				// 1) Add new candidates
+				ValueType val = getValue(g);
+				for (auto it = storage.begin(); it != storage.end(); ++it) {
+					if ((*it).first.second < val) {
+						idxMap[fidx] = storage.insert(it, std::make_pair(std::make_pair(g, val), fidx));
+						break;
+					}
 				}
-			}
-			// 2) evict least one
-			if (idxMap.size() > bestNum) {
-				idxMap.erase((*(--(storage.end()))).second);
-				storage.pop_back();
+				// 2) evict least one
+				if (idxMap.size() > intervalLen) {
+					idxMap.erase(storage.back().second);
+					storage.pop_back();
+				}
 			}
 		}
 		return true;
@@ -86,6 +99,7 @@ public:
 		if (head == range.first && tail == range.second) {
 			for (auto item:storage) {
 				ret.push_back(std::make_pair(item.second, item.first.second));
+				if (ret.size() >= bestNum) break;
 			}
 
 		} else {

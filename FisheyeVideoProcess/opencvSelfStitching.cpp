@@ -3,6 +3,18 @@
 #include "Supplements\Matchers.h"
 #include "Supplements\RewarpableWarper.h"
 
+#define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
+
+#if USE_WARPER_TYPE==1	
+#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
+	supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
+#elif USE_WARPER_TYPE==0
+#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
+	supp::RewarpableCylindricalWarper* warper = new supp::RewarpableCylindricalWarper(warped_image_scale * seam_work_aspect);
+#elif USE_WARPER_TYPE==2
+#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
+	supp::RewarpableSphericalWarper* warper = new supp::RewarpableSphericalWarper(warped_image_scale * seam_work_aspect);
+#endif
 
 using namespace cv::detail;
 StitchingInfo StitchingUtil::opencvSelfStitching(
@@ -16,10 +28,9 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		return opencvSelfStitching(srcs,dstImage, sz, sInfo, maskRatio);
 }
 
+
 StitchingInfo StitchingUtil::opencvSelfStitching(
 	const std::vector<Mat> &srcs, Mat &dstImage, const Size resizeSz,StitchingInfo &sInfoNotNull, std::pair<double, double> &maskRatio) {
-	#define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
-
 	StitchingInfo sInfo;
 
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
@@ -96,7 +107,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		BestOf2NearestMatcher matcher(false, osParam.match_conf);
 		matcher(features, pairwise_matches); 
 		matcher.collectGarbage();
-		estimator = HomographyBasedEstimator(false);
+		estimator = HomographyBasedEstimator();
 		estimator(features, pairwise_matches, cameras);
 	
 	
@@ -170,19 +181,9 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		//masks[i] = getMask(images[i],i==0);
 	}
 
-	/**
-	* Spherical is nearly deprecated
-	* Merator is slower but better than Cylindrical
-	*/
-#if USE_WARPER_TYPE==1
-	supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
-#elif USE_WARPER_TYPE==0
-	supp::RewarpableCylindricalWarper* warper = new supp::RewarpableCylindricalWarper(warped_image_scale * seam_work_aspect);
-#elif USE_WARPER_TYPE==2
-	supp::RewarpableSphericalWarper* warper = new supp::RewarpableSphericalWarper(warped_image_scale * seam_work_aspect);
-#endif
+	CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect);
 	if (!sInfoNotNull.isNull()) {
-		warper->setProjectorData(sInfoNotNull.warpData);
+		warper->setProjectorData(sInfoNotNull.projData);
 		warper->setPLTs(sInfoNotNull.pltHelpers);
 	}
 
@@ -286,9 +287,9 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			blender = Blender::createDefault(osParam.blend_type, false);
 			Size dst_sz = resultRoi(corners, sizes).size();
 			float blend_width = sqrt(static_cast<float>(dst_sz.area())) * osParam.blend_strength / 100.f;
-			if (blend_width < 1.f)
+			if (!osParam.isRealStitching||blend_width < 1.f) {
 				blender = Blender::createDefault(Blender::NO, false);
-			else if (osParam.blend_type == Blender::MULTI_BAND) {
+			} else if (osParam.blend_type == Blender::MULTI_BAND) {
 				MultiBandBlender * mb = dynamic_cast<MultiBandBlender*>(static_cast<Blender*>(blender));
 				mb->setNumBands(static_cast<int>(ceil(log(blend_width)/log(2.0)) - 1.0));
 				LOG_MESS("Multi-band blender, number of bands: " << mb->numBands());
@@ -306,7 +307,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 
 	}
 
-	sInfo.warpData = (warper)->getProjectorAllData();
+	sInfo.projData = (warper)->getProjectorAllData();
 	sInfo.resultRois = (warper)->getResultRoiData();
 	sInfo.setRanges(corners, sizes);
 
@@ -315,8 +316,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	result.convertTo(tmp, CV_8UC3);
 	removeBlackPixel(tmp, dstImage, sInfo);
 	LOG_MESS("Size of Pano:" << dstImage.size());
-	//ImageUtil::imshow("dst",dstImage, 0.5);
-	//cvWaitKey();
+	
 	if (warper != NULL) delete warper;
 	return sInfo;
 }
