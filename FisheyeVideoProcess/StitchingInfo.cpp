@@ -1,6 +1,7 @@
 #include "StitchingUtil.h"
 #include "OtherUtils\ImageUtil.h"
 #include "OtherUtils\FileUtil.h"
+#include "Supplements\Matchers.h"
 
 
 
@@ -21,6 +22,7 @@ StitchingInfo::StitchingInfo(const StitchingInfo &sinfo){
 		projData = sinfo.projData.clone();
 		resultRois.assign(sinfo.resultRois.begin(), sinfo.resultRois.end());
 		pltHelpers.assign(sinfo.pltHelpers.begin(), sinfo.pltHelpers.end());
+		features.assign(sinfo.features.begin(), sinfo.features.end());
 }
 
 StitchingInfo &StitchingInfo::operator = (const StitchingInfo &sinfo) {
@@ -34,6 +36,7 @@ StitchingInfo &StitchingInfo::operator = (const StitchingInfo &sinfo) {
 		projData = sinfo.projData.clone();
 		resultRois.assign(sinfo.resultRois.begin(), sinfo.resultRois.end());
 		pltHelpers.assign(sinfo.pltHelpers.begin(), sinfo.pltHelpers.end());
+		features.assign(sinfo.features.begin(), sinfo.features.end());
 		return *this;
 }
 
@@ -163,10 +166,10 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	selectedFrameIdx.clear();
 	for (int i=0; i<r; ++i) selectedFrameIdx.push_back(tmp[i].first);
 
-	if (/*selectedFrameIdx.empty() 
+	if (selectedFrameIdx.empty() 
 		|| !resultRoisUsedFrameCur.empty()
-			&& std::unordered_set<int>(selectedFrameIdx.begin(), selectedFrameIdx.end()) == resultRoisUsedFrameCur*/
-		!preSuccessSIG.empty()) {
+			&& std::unordered_set<int>(selectedFrameIdx.begin(), selectedFrameIdx.end()) == resultRoisUsedFrameCur
+		/*!preSuccessSIG.empty()*/) {
 		LOG_MESS("LSIG: Reuse former SIG, since current selectedFrame is" << vec2str(selectedFrameIdx));
 		selectedFrameIdx = std::vector<int>(resultRoisUsedFrameCur.begin(), resultRoisUsedFrameCur.end());
 		return preSuccessSIG;
@@ -177,8 +180,19 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 		StitchingInfo::getAverageSIG(SIGs, ret);
 
 		// Adjust the PLT for StitchingInfoGroup
-		adjustPltForLSIG(ret, selectedFrameIdx, stitchingUtil);
-		return preSuccessSIG=ret;
+		bool b = stitchingUtil.osParam.isRealStitching;
+		stitchingUtil.osParam.isRealStitching = false;
+		bool retOK = adjustPltForLSIG(ret, selectedFrameIdx, stitchingUtil);
+		stitchingUtil.osParam.isRealStitching = b;
+
+		if (retOK) {
+			return preSuccessSIG=ret;
+		} else {
+			LOG_ERR("LSIG: Reuse former SIG, since current selectedFrame failed " << vec2str(selectedFrameIdx));
+			selectedFrameIdx = std::vector<int>(resultRoisUsedFrameCur.begin(), resultRoisUsedFrameCur.end());
+			return preSuccessSIG;
+		}
+
 	}
 
 }
@@ -189,7 +203,7 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 
 	if (stitchingWaitingBuff.size() >= LSIG_MAX_WAITING_BUFF_SIZE) {
 		stitchingWaitingBuffPersistedSize[fidx] = tmpV.size();
-		FileUtil::persistMats(fidx, tmpV, FILE_STORAGE_TYPE::BIN);
+		FileUtil::persistMats(fidx, tmpV, FileUtil::FILE_STORAGE_MAT_DEFAULT);
 	} else
 		stitchingWaitingBuff[fidx] = tmpV;
 
@@ -210,7 +224,7 @@ bool LocalStitchingInfoGroup::getFromWaitingBuff(int fidx, std::vector<Mat>& v) 
 		v = (*ret).second; return true;
 	} else if (ret1 != stitchingWaitingBuffPersistedSize.end()) {
 		int sz = (*ret1).second;
-		v = FileUtil::loadMats(fidx, sz, FILE_STORAGE_TYPE::BIN);
+		v = FileUtil::loadMats(fidx, sz, FileUtil::FILE_STORAGE_MAT_DEFAULT);
 		return true;
 	} else {
 		LOG_ERR("Cannot find " << fidx << " frame src data.")
@@ -223,7 +237,7 @@ void LocalStitchingInfoGroup::removeFromWaitingBuff(int fidx) {
 	if (stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end())
 		stitchingWaitingBuff.erase(fidx);
 	else if (stitchingWaitingBuffPersistedSize.find(fidx) != stitchingWaitingBuffPersistedSize.end()) {
-		FileUtil::deletePersistedMats(fidx,stitchingWaitingBuffPersistedSize[fidx],FILE_STORAGE_TYPE::BIN);
+		FileUtil::deletePersistedMats(fidx,stitchingWaitingBuffPersistedSize[fidx],FileUtil::FILE_STORAGE_MAT_DEFAULT);
 		stitchingWaitingBuffPersistedSize.erase(fidx);
 	}
 }
@@ -263,13 +277,14 @@ float StitchingInfo::getWarpScale() const {
 	return (focals[(focals.size()-1) / 2] + focals[focals.size() / 2]) * 0.5f; 
 }
 
-void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const std::vector<int>&v, StitchingUtil &stitchingUtil) {
+bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const std::vector<int>&v, StitchingUtil &stitchingUtil) {
 	std::unordered_set<int> tmp(v.begin(), v.end());
 	if (tmp == resultRoisUsedFrameCur) {
 		LOG_MESS("LSIG: resultRoisUsedFrameCur remains the same.")
 		for (int i=0; i<group.size(); ++i) {
 			group[i].pltHelpers = pltHelperGroup[i];
 		}
+		return true;
 	} else {
 		if (resultRoisUsedFrameBase.empty()) {
 			LOG_WARN("LSIG: resultRoisUsedFrameBase is empty, set to" << vec2str(v));
@@ -293,8 +308,10 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 				throw e;
 			}
 #endif
-			for (auto sinfo:out) {
-				resultRoisBase.push_back(sinfo.resultRois);
+			if (!StitchingInfo::isSuccess(out)) return false;
+			for (int i=0; i<out.size(); ++i) {
+				resultRoisBase.push_back(out[i].resultRois);
+				group[i].projData = out[i].projData.clone();
 			}
 			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
 			for (int i=0; i<out.size(); ++i) {
@@ -328,6 +345,10 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 				throw e;
 			}
 #endif
+			if (!StitchingInfo::isSuccess(out)) return false;
+			for (int i=0; i<out.size(); ++i) {
+				group[i].projData = out[i].projData.clone();
+			}
 			assert(out.size() == resultRoisBase.size());
 			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
 			for (int i=0; i<out.size(); ++i) {
@@ -375,6 +396,7 @@ void LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 			}
 		}
 	}
+	return true;
 }
 
 void LocalStitchingInfoGroup::addToStitchedBuff(int fidx, Mat& m) {
@@ -389,6 +411,105 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 		return;
 	}
 
+	// Check consistency
+	for (int i=0;i<ret.size(); ++i) {
+		auto st = (*pSIGs[0])[i].srcType, ic = (*pSIGs[0])[i].imgCnt;
+		auto csz = (*pSIGs[0])[i].cameras.size();
+		auto mr = (*pSIGs[0])[i].maskRatio; 
+		auto rs = (*pSIGs[0])[i].resizeSz;
+		for (int j=1; j<r; ++j) {
+			if (st != (*pSIGs[j])[i].srcType
+				|| ic != (*pSIGs[j])[i].imgCnt
+				|| csz != (*pSIGs[j])[i].cameras.size()
+				|| mr != (*pSIGs[j])[i].maskRatio 
+				|| rs != (*pSIGs[j])[i].resizeSz) {
+					LOG_ERR("StitchingInfo: Inconsistency encountered in getAverageSIG()");
+					ret.assign((*pSIGs[0]).begin(),(*pSIGs[0]).end());
+					return;
+			}
+		}
+	}
+
+	// Averaging
+	for (int j=0; j<ret.size(); ++j) {
+		ret[j].srcType = (*pSIGs[0])[j].srcType;
+		ret[j].resizeSz = (*pSIGs[0])[j].resizeSz;
+		ret[j].imgCnt = (*pSIGs[0])[j].imgCnt;
+		ret[j].maskRatio = (*pSIGs[0])[j].maskRatio;
+		ret[j].cameras = std::vector<cv::detail::CameraParams>((*pSIGs[0])[j].cameras.size());
+		supp::MergeableBestOf2NearestMatcher matcher(false, OpenCVStitchParam().match_conf);
+		matcher.setOnlyFindMatched(true);
+		std::vector<supp::matchesTuple> mtps(r);
+		std::vector<std::vector<cv::detail::MatchesInfo>> pairMatches(r);
+		for (int i=0; i<r; ++i) {
+			matcher((*pSIGs[i])[j].features, pairMatches[i]); 
+			matcher.collectGarbage();
+			mtps[i] = supp::matchesTuple((*pSIGs[i])[j].features, pairMatches[i]);
+		}
+		std::vector<cv::detail::ImageFeatures> retFeatures;
+		std::vector<cv::detail::MatchesInfo> retMatchesInfo;
+		supp::matchesTuple retMtp(retFeatures, retMatchesInfo);
+
+		int version = matcher.mergeMatchesTuple(mtps,retMtp);
+		if (matcher.verifyMergeVersion(version)) {
+			matcher.setIsInMergeStatus(true);
+			matcher.setOnlyFindMatched(false);
+			matcher.match(*retMtp.pfeatures, *retMtp.pmatchesInfos, *retMtp.pmask);
+			matcher.collectGarbage();
+
+			auto estimator = cv::detail::HomographyBasedEstimator();
+			estimator(*retMtp.pfeatures, *retMtp.pmatchesInfos, ret[j].cameras);
+
+			std::vector<std::vector<Mat>> rvec(ret[j].cameras.size());
+			for (int k=0; k<ret[j].cameras.size();++k) {
+				for (int i=0; i<r; ++i) {
+					rvec[k].push_back((*pSIGs[i])[j].cameras[k].R);
+				}
+				supp::_ProjectorBase::getAverRotationMatrix(rvec[k], ret[j].cameras[k].R);
+			}
+
+
+			for (size_t i = 0; i < ret[j].cameras.size(); ++i) {
+				Mat R;
+				ret[j].cameras[i].R.convertTo(R, CV_32F);
+				ret[j].cameras[i].R = R;
+				//LOG_MESS("Initial intrinsics #" << i+1 << ":\n" << ret[j].cameras[i].K());
+				//LOG_MESS("Initial intrinsics R #" << i+1 << ":\n" << ret[j].cameras[i].R);
+				//LOG_MESS("Initial intrinsics t #" << i+1 << ":\n" << ret[j].cameras[i].t);
+				//system("pause");
+			}
+
+			Ptr<detail::BundleAdjusterBase> adjuster;
+			adjuster = new detail::BundleAdjusterRay();
+
+			adjuster->setConfThresh(OpenCVStitchParam().conf_thresh);
+			Mat_<uchar> refine_mask = Mat::zeros(3, 3, CV_8U);
+			refine_mask(0,0) = 1;
+			refine_mask(0,1) = 1;
+			refine_mask(0,2) = 1;
+			refine_mask(1,1) = 1;
+			refine_mask(1,2) = 1;
+			adjuster->setRefinementMask(refine_mask);
+			(*adjuster)(*retMtp.pfeatures, *retMtp.pmatchesInfos, ret[j].cameras);
+
+			std::vector<Mat> rmats;
+			for (size_t i = 0; i < ret[j].cameras.size(); ++i)
+				rmats.push_back(ret[j].cameras[i].R);
+			cv::detail::waveCorrect(rmats, OpenCVStitchParam().wave_correct);
+			for (size_t i = 0; i < ret[j].cameras.size(); ++i){
+				ret[j].cameras[i].R = rmats[i];
+			}
+		} else {
+			LOG_ERR("MergeableBestOf2NearestMatcher: Inconsistent merge version.");
+			ret.assign((*pSIGs[0]).begin(),(*pSIGs[0]).end()) ;
+			return;
+		}
+
+	
+	}
+	
+
+	/**
 	for (int j=0; j<ret.size(); ++j) {
 			ret[j].srcType = (*pSIGs[0])[j].srcType;
 			ret[j].imgCnt = (*pSIGs[0])[j].imgCnt;
@@ -401,15 +522,13 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 				ret[j].cameras[camidx].focal = 0;
 				ret[j].cameras[camidx].ppx = 0;
 				ret[j].cameras[camidx].ppy = 0;
-				//ret[j].cameras[camidx].R = Mat::zeros((*pSIGs[0])[j].cameras[camidx].R.size(), (*pSIGs[0])[j].cameras[camidx].R.type());
-				//ret[j].cameras[camidx].t = Mat::zeros((*pSIGs[0])[j].cameras[camidx].t.size(),(*pSIGs[0])[j].cameras[camidx].t.type());
 			}
 			for (int i=0; i<r; ++i) {
-				/*
-				* float warpedImageScale;
-				* Size resizeSz;
-				* std::vector<cv::detail::CameraParams> cameras
-				*/
+				
+				// * float warpedImageScale;
+				// * Size resizeSz;
+				// * std::vector<cv::detail::CameraParams> cameras
+				
 				ret[j].resizeSz.width += (*pSIGs[i])[j].resizeSz.width;
 				ret[j].resizeSz.height += (*pSIGs[i])[j].resizeSz.height;
 				projDatas.push_back((*pSIGs[i])[j].projData);
@@ -421,8 +540,6 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 				
 					ret[j].cameras[camidx].ppx += (*pSIGs[i])[j].cameras[camidx].ppx;
 					ret[j].cameras[camidx].ppy += (*pSIGs[i])[j].cameras[camidx].ppy;
-					//ret[j].cameras[camidx].R += (*pSIGs[i])[j].cameras[camidx].R;
-					//ret[j].cameras[camidx].t += (*pSIGs[i])[j].cameras[camidx].t;
 				}
 
 			}
@@ -434,68 +551,12 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 				ret[j].cameras[camidx].aspect /= r;
 				ret[j].cameras[camidx].ppx /= r;
 				ret[j].cameras[camidx].ppy /= r;
-				//ret[j].cameras[camidx].R /= double(r);
-				//ret[j].cameras[camidx].t /= double(r);
 			}
 			//LOG_ERR("before;\n" << projDatas[0]);
 			getAvergeProjData(projDatas, ret[j].projData, ret[j].cameras);
 			//LOG_ERR("after;\n" << ret[j].projData);
 			//system("pause");
 		}
-
-}
-
-void StitchingInfo::getAvergeProjData(std::vector<Mat> &pDatas, Mat &ret, std::vector<cv::detail::CameraParams> &cams) {
-	ret = Mat::zeros(pDatas[0].size(),pDatas[0].type());
-	std::vector<Mat> retRows(ret.rows);
-	std::vector<Mat> averRots(ret.rows);
-	std::vector<std::vector<int>> tmp(cams.size());
-	Mat rot;
-	for(int pj = 0; pj<ret.rows;++pj) {
-		// projData format -- 0:scale, 1-9:k, 10-18:rinv, 19-27:r_kinv, 28-36:k_rinv, 37-39:t, 40:curImageIdx
-		retRows[pj] = Mat::zeros(1,ret.cols,ret.type());
-		std::vector<Mat> rots;
-		for (int cand=0; cand < pDatas.size(); ++cand) {
-			retRows[pj] += pDatas[cand](Range(pj,pj+1),Range(0,ret.cols));
-			rot = pDatas[cand](Range(pj,pj+1),Range(10,19)).reshape(0,3).t();
-			rots.push_back(rot);
-		}
-		retRows[pj] /= float(pDatas.size());
-		supp::_ProjectorBase::getAverRotationMatrix(rots, averRots[pj]);
-		tmp[int(retRows[pj].at<float>(0, retRows[pj].cols-1))].push_back(pj);
-	}
-	// WaveCorrect to rot mat
-	auto waveCorrectKind = OpenCVStitchParam().wave_correct;
-	for (int j=0; j<tmp[0].size();++j) {
-		std::vector<Mat> rmats;
-		for (int i = 0; i < cams.size(); ++i)
-			rmats.push_back(averRots[tmp[i][j]].reshape(0,3));
-		cv::detail::waveCorrect(rmats, waveCorrectKind);
-		for (int i = 0; i < cams.size(); ++i)
-			averRots[tmp[i][j]] = rmats[i];
-	}
-
-	for (int i=0; i<cams.size(); ++i) {
-		cams[i].R = averRots[tmp[i][0]].reshape(0,3);
-		cams[i].t = retRows[tmp[i][0]](Range(0,1),Range(37,40)).reshape(0,3);
-	}
-
-
-	for (int pj=0; pj<ret.rows;++pj) {
-		float scale = retRows[pj].at<float>(0,0);
-		Mat K = retRows[pj](Range(0,1),Range(1,10)).reshape(0,3);
-		Mat T = retRows[pj](Range(0,1),Range(37,40)).reshape(0,3);
-		Mat R = averRots[pj].reshape(0,3);
-		auto _retRow = supp::_ProjectorBase::reCalcCameraParamsAndGetAllMats(
-			scale,K,R,T,
-			int(retRows[pj].at<float>(0, retRows[pj].cols-1)));
-		for (int i=0; i<_retRow.size(); ++i) {
-			retRows[pj].at<float>(0,i) = _retRow[i];
-		}
-		retRows[pj].convertTo(retRows[pj], ret.type());
-		retRows[pj].copyTo(ret(Range(pj,pj+1), Range(0,ret.cols)));
-	}
-	//LOG_ERR("\n"<<ret);
-
+	**/
 
 }

@@ -1,6 +1,5 @@
 #pragma once
 #include <sstream>
-#include <time.h>
 #include "Config.h"
 #define NEED_LOG
 extern std::string runtimeHashCode;

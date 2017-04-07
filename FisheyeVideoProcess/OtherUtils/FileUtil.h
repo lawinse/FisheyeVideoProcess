@@ -8,7 +8,8 @@ extern std::string runtimeHashCode;
 
 enum FILE_STORAGE_TYPE {
 	NORMAL,
-	BIN
+	BIN,
+	IMG
 };
 
 class FileUtil {
@@ -25,6 +26,9 @@ private:
 	static bool readMatBinary(std::ifstream& ifs, cv::Mat& in_mat);
 	static bool LoadMatBinary(const std::string& filename, cv::Mat& output);
 public:
+	static FILE_STORAGE_TYPE FILE_STORAGE_MAT_DEFAULT;
+
+
 	static bool findOrCreateAllDirsNeeded();
 	static void persistMats(int fidx, std::vector<Mat> &mats, FILE_STORAGE_TYPE fst=NORMAL);
 	static std::vector<Mat> loadMats(int fidx, int sz, FILE_STORAGE_TYPE fst=NORMAL);

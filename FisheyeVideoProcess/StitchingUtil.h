@@ -7,7 +7,7 @@
 #include ".\OtherUtils\IntervalBestValueMaintainer.h"
 
 #ifdef OPENCV_3
-	#include<opencv2\stitching.hpp>
+	#include <opencv2\stitching.hpp>
 	#include <opencv2\stitching\detail\matchers.hpp>
 	#include <opencv2\xfeatures2d\nonfree.hpp>
 #else
@@ -81,6 +81,8 @@ public:
 	Size resizeSz;
 	int srcType;
 	
+
+	std::vector<cv::detail::ImageFeatures> features;
 	std::pair<double, double> maskRatio;
 	std::vector<Range> ranges;	// only cares width-wise
 	std::vector<cv::detail::CameraParams> cameras;
@@ -107,9 +109,7 @@ public:
 
 	static bool isSuccess(const StitchingInfoGroup &);
 	static double evaluate(const StitchingInfoGroup &);
-	static void getAvergeProjData(std::vector<Mat> &pDatas, Mat &ret, std::vector<cv::detail::CameraParams> &cams);
 	static void getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs, StitchingInfoGroup &ret);
-	//static MatchesInfo mergeMatchesInfo(MatchesInfo &mi1,MatchesInfo &mi2);
 };
 
 class LocalStitchingInfoGroup {
@@ -151,7 +151,7 @@ public:
 	std::vector<std::pair<int, Mat>>* getStitchedBuff() {return &stitchedBuff;}
 	void clearStitchedBuff() {stitchedBuff.clear();}
 	StitchingInfoGroup getAver(int head, int tail, std::vector<int>&, StitchingUtil &);
-	void adjustPltForLSIG(StitchingInfoGroup &, const std::vector<int>&, StitchingUtil &);
+	bool adjustPltForLSIG(StitchingInfoGroup &, const std::vector<int>&, StitchingUtil &);
 
 };
 

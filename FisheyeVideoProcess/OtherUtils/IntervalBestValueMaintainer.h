@@ -18,7 +18,7 @@ public:
 		storage.clear();
 		idxMap.clear();
 		getValue = gv;
-		isMonoQueue = (bestNum==1);
+		isMonoQueue = (bestNum==1)||(intvlLen==INT_MAX);
 	}
 	int getCandNum() const {return range.second - range.first;}
 	std::pair<int,int> getRange() const {return range;}
@@ -54,34 +54,35 @@ public:
 			return false;
 		}
 
-		if (isMonoQueue) {
-			ValueType val = getValue(g);
-			while(storage.size() && storage.back().first.second <= val) {
-				idxMap.erase(storage.back().second);
-				storage.pop_back();
+		// 1) Add new candidates
+		ValueType val = getValue(g);
+		auto it = storage.begin();
+		for (; it != storage.end(); ++it) {
+			if ((*it).first.second < val) {
+				idxMap[fidx] = storage.insert(it, std::make_pair(std::make_pair(g, val), fidx));
+				break;
 			}
-			storage.push_back(std::make_pair(std::make_pair(g, val),fidx));
+		}
+		if (it == storage.end()) {
+			storage.push_back(std::make_pair(std::make_pair(g, getValue(g)),fidx));
 			idxMap[fidx] = --(storage.end());
-		} else {
-			if (idxMap.empty()) {
-				// Add new candidates
-				storage.push_back(std::make_pair(std::make_pair(g, getValue(g)),fidx));
-				idxMap[fidx] = --(storage.end());
-			} else {
-				// 1) Add new candidates
-				ValueType val = getValue(g);
-				for (auto it = storage.begin(); it != storage.end(); ++it) {
-					if ((*it).first.second < val) {
-						idxMap[fidx] = storage.insert(it, std::make_pair(std::make_pair(g, val), fidx));
-						break;
-					}
-				}
-				// 2) evict least one
-				if (idxMap.size() > intervalLen) {
-					idxMap.erase(storage.back().second);
-					storage.pop_back();
-				}
+		}
+
+		// 1.5) if isMonoQueue, remove the less ones
+		if (isMonoQueue) {
+			auto pos = idxMap[fidx];
+			for (++pos;pos != storage.end(); ++pos) {
+				idxMap.erase((*pos).second);
 			}
+			pos = idxMap[fidx];
+			storage.erase(++pos,storage.end());
+		}
+
+
+		// 2) evict least one
+		if (idxMap.size() > intervalLen) {
+			idxMap.erase(storage.back().second);
+			storage.pop_back();
 		}
 		return true;
 	}

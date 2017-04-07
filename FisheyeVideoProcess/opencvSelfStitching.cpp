@@ -6,14 +6,14 @@
 #define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
 
 #if USE_WARPER_TYPE==1	
-#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
-	supp::RewarpableMercatorWarper* warper = new supp::RewarpableMercatorWarper(warped_image_scale * seam_work_aspect);
+#define CREATE_WAPPER_POINTER(a,b)	\
+	supp::RewarpableMercatorWarper* (a) = new supp::RewarpableMercatorWarper(b);
 #elif USE_WARPER_TYPE==0
-#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
-	supp::RewarpableCylindricalWarper* warper = new supp::RewarpableCylindricalWarper(warped_image_scale * seam_work_aspect);
+#define CREATE_WAPPER_POINTER(a,b)	\
+	supp::RewarpableCylindricalWarper* (a) = new supp::RewarpableCylindricalWarper(b);
 #elif USE_WARPER_TYPE==2
-#define CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect)	\
-	supp::RewarpableSphericalWarper* warper = new supp::RewarpableSphericalWarper(warped_image_scale * seam_work_aspect);
+#define CREATE_WAPPER_POINTER(a,b)	\
+	supp::RewarpableSphericalWarper* (a) = new supp::RewarpableSphericalWarper(b);
 #endif
 
 using namespace cv::detail;
@@ -109,6 +109,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		matcher.collectGarbage();
 		estimator = HomographyBasedEstimator();
 		estimator(features, pairwise_matches, cameras);
+		sInfo.features.assign(features.begin(), features.end());
 	
 	
 		for (size_t i = 0; i < cameras.size(); ++i) {
@@ -181,7 +182,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		//masks[i] = getMask(images[i],i==0);
 	}
 
-	CREATE_WAPPER_POINTER(warper, warped_image_scale, seam_work_aspect);
+	CREATE_WAPPER_POINTER(warper, warped_image_scale*seam_work_aspect);
 	if (!sInfoNotNull.isNull()) {
 		warper->setProjectorData(sInfoNotNull.projData);
 		warper->setPLTs(sInfoNotNull.pltHelpers);

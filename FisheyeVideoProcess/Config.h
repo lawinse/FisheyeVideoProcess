@@ -1,6 +1,8 @@
 #pragma once
 #include <math.h>
 #include <iostream>
+#include <ctime>
+#include <cstdlib>
 #include <opencv2\opencv.hpp>
 #include <opencv2\core\core.hpp>
 #include <opencv2\highgui\highgui.hpp>
@@ -52,7 +54,6 @@ std::string vec2str(const std::vector<T> & v) {
 	ss << "}";
 	return ss.str();
 }
-
 
 inline bool _cmp_p2f(const cv::Point2f &a, const cv::Point2f &b) {
 	return a.x == b.x ? a.y < b.y : a.x < b.x;

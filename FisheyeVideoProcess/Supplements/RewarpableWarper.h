@@ -142,6 +142,11 @@ namespace supp{
 		void setPLTs(std::vector<PlaneLinearTransformHelper>& _plts) {plts.assign(_plts.begin(), _plts.end());curBuildMapsTime = 0;}
 
 		void setProjectorData(Mat &dmat) {
+			if (dmat.size().area() == 0) {
+				LOG_WARN("RewarpableRotationWarperBase: No actual mat data when setProjectorData()");
+				return;
+			}
+
 			std::vector<std::vector<float>> d = std::vector<std::vector<float>>(dmat.rows, std::vector<float>(dmat.cols));
 			for (int i=0; i<dmat.rows; ++i)
 				for (int j=0; j<dmat.cols; ++j)
@@ -161,7 +166,6 @@ namespace supp{
 
 	    void detectResultRoi(Size src_size, Point &dst_tl, Point &dst_br) {
 			if (curBuildMapsTime < plts.size()) {
-				//LOG_MESS("RewarpableRotationWarperBase.detectResultRoi: Manually set pltHelper.")
 				projector_.pltHelper = plts[curBuildMapsTime]; 
 				curBuildMapsTime++;
 			}
@@ -171,7 +175,6 @@ namespace supp{
 
 		void detectResultRoiByBorder(Size src_size, Point &dst_tl, Point &dst_br) {
 			if (curBuildMapsTime < plts.size()) {
-				//LOG_MESS("RewarpableRotationWarperBase.detectResultRoiByBorder: Manually set pltHelper.")
 				projector_.pltHelper = plts[curBuildMapsTime]; 
 				curBuildMapsTime++;
 			}

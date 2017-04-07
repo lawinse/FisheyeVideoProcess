@@ -1,6 +1,8 @@
 #include "FileUtil.h"
 std::vector<std::string> FileUtil::waitToDeleteBuff = std::vector<std::string>();
 
+FILE_STORAGE_TYPE FileUtil::FILE_STORAGE_MAT_DEFAULT = FILE_STORAGE_TYPE::IMG;
+
 bool FileUtil::findOrCreateDir(const char * path) {
 	if (access(path,0) == -1) {
 		int flg = mkdir(path);
@@ -63,6 +65,11 @@ void FileUtil::persistMats(int fidx, std::vector<Mat> &mats, FILE_STORAGE_TYPE f
 		for (int i=0; i<mats.size(); ++i) {
 			SaveMatBinary(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin"),mats[i]);
 		}
+	} else if (fst == IMG) {
+		std::vector<int>p(2);p[0] = CV_IMWRITE_PNG_COMPRESSION,p[1]=0;
+		for (int i=0; i<mats.size(); ++i) {
+			imwrite(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png"),mats[i],p);
+		}
 	}
 
 }
@@ -81,6 +88,10 @@ std::vector<Mat> FileUtil::loadMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 		for (int i=0; i<v.size(); ++i) {
 			LoadMatBinary(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin"),v[i]);
 		}
+	} else if (fst == IMG) {
+		for (int i=0; i<v.size(); ++i) {
+			v[i] = imread(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png"),CV_LOAD_IMAGE_UNCHANGED);
+		}
 	}
 	return v;
 }
@@ -88,9 +99,13 @@ std::vector<Mat> FileUtil::loadMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 void FileUtil::deletePersistedMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 	if (fst == NORMAL) {
 		deleteFile(getFileNameByFidx(fidx).c_str());
-	}else if (fst == BIN) {
+	} else if (fst == BIN) {
 		for (int i=0; i<sz; ++i) {
 			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin").c_str());
+		}
+	} else if (fst == IMG) {
+		for (int i=0; i<sz; ++i) {
+			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png").c_str());
 		}
 	}
 }

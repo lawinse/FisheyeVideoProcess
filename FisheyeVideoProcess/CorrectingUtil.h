@@ -92,14 +92,14 @@ struct ReMapping{
 	// For memorization   map[dst] = src;
 	bool bMapped;
 	struct pairhash {//double hash function for pair key
-	public:
-		template <typename T, typename U>
-		size_t operator()(const std::pair<T, U> &rhs) const {
-			size_t l = std::hash<T>()(rhs.first);
-			size_t r = std::hash<U>()(rhs.second);
-			return l + 0x9e3779b9 + (r << 6) + (r >> 2);
-		}
-	};
+public:
+	template <typename T, typename U>
+	size_t operator()(const std::pair<T, U> &rhs) const {
+		size_t l = std::hash<T>()(rhs.first);
+		size_t r = std::hash<U>()(rhs.second);
+		return l + 0x9e3779b9 + (r << 6) + (r >> 2);
+	}
+};
 
 
 	std::unordered_map<std::pair<int,int>, std::pair<int,int>, pairhash> map;
