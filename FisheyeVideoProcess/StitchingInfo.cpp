@@ -124,8 +124,12 @@ double StitchingInfo::evaluate(const StitchingInfoGroup &group) {
 		return 0.0;
 	} else {
 		double sum_val = 1.0;
-		for (StitchingInfo sinfo:group) sum_val *= sinfo.evaluate();
-		return pow(sum_val,1.0/group.size());
+		if (group.size() == 4) {
+			sum_val *= min(group[0].evaluate(),group[1].evaluate())*group[2].evaluate()*group[3].evaluate();
+		} else {
+			for (StitchingInfo sinfo:group) sum_val *= sinfo.evaluate();
+		}
+		return sum_val;
 	}
 }
 
@@ -167,7 +171,7 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	for (int i=0; i<r; ++i) selectedFrameIdx.push_back(tmp[i].first);
 
 	if (
-#if LSIG_MOVEING_WINDOWS
+#if LSIG_MOVING_WINDOWS
 		selectedFrameIdx.empty() 
 		|| !resultRoisUsedFrameCur.empty()
 			&& std::unordered_set<int>(selectedFrameIdx.begin(), selectedFrameIdx.end()) == resultRoisUsedFrameCur
@@ -211,16 +215,18 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 		FileUtil::persistFrameMats(fidx, tmpV, FileUtil::FILE_STORAGE_MAT_DEFAULT);
 	} else
 		stitchingWaitingBuff[fidx] = tmpV;
-
-	if (stitchingWaitingBuff.size() > wSize+5) {
-		LOG_MESS("LSIG: Starting releasing stitchingWaitingBuff, cur Size: "\
-			<< stitchingWaitingBuff.size()+stitchingWaitingBuffPersistedSize.size());
-		for (int i=fidx-(wSize+10); i<=fidx-(wSize+1); ++i)
-			removeFromWaitingBuff(i);
-		LOG_MESS("LSIG: Done releasing. Size: "\
-			<< stitchingWaitingBuff.size()+stitchingWaitingBuffPersistedSize.size());
-	}
 }
+
+
+void LocalStitchingInfoGroup::dumpWaitingBuffToDisk() {
+	for (auto src:stitchingWaitingBuff) {
+		stitchingWaitingBuffPersistedSize[src.first] = src.second.size();
+		FileUtil::persistFrameMats(src.first, src.second, FileUtil::FILE_STORAGE_MAT_DEFAULT);
+	}
+	stitchingWaitingBuff.clear();
+	LOG_MESS("LocalStitchingInfoGroup: Dump WaitingBuff To Disk.")
+}
+
 
 bool LocalStitchingInfoGroup::getFromWaitingBuff(int fidx, std::vector<Mat>& v) {
 	auto ret = stitchingWaitingBuff.find(fidx);
@@ -235,16 +241,25 @@ bool LocalStitchingInfoGroup::getFromWaitingBuff(int fidx, std::vector<Mat>& v) 
 		LOG_ERR("Cannot find " << fidx << " frame src data.")
 		return false;
 	}
-		
 }
 
-void LocalStitchingInfoGroup::removeFromWaitingBuff(int fidx) {
-	if (stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end())
+bool LocalStitchingInfoGroup::isExistInWaitingBuff(int fidx) {
+	return stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end()
+		|| stitchingWaitingBuffPersistedSize.find(fidx) != stitchingWaitingBuffPersistedSize.end();
+}
+
+
+bool LocalStitchingInfoGroup::removeFromWaitingBuff(int fidx) {
+	if (stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end()) {
 		stitchingWaitingBuff.erase(fidx);
+		return true;
+	}
 	else if (stitchingWaitingBuffPersistedSize.find(fidx) != stitchingWaitingBuffPersistedSize.end()) {
 		FileUtil::deletePersistedFrameMats(fidx,stitchingWaitingBuffPersistedSize[fidx],FileUtil::FILE_STORAGE_MAT_DEFAULT);
 		stitchingWaitingBuffPersistedSize.erase(fidx);
+		return true;
 	}
+	return false;
 }
 bool StitchingInfo::setToCamerasInternalParam(std::vector<cv::detail::CameraParams> &_cameras) {
 	if (_cameras.size() != 0) {LOG_WARN("cameraParams are not null !"); return false;}
@@ -297,7 +312,8 @@ bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 			resultRoisUsedFrameCur = resultRoisUsedFrameBase;
 			// calc resultRois
 			Mat dummydst;
-			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			std::vector<Mat> dummysrcs;//(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			getFromWaitingBuff(v[0],dummysrcs);
 			StitchingInfoGroup out;
 #ifdef TRY_CATCH
 			try {
@@ -316,7 +332,7 @@ bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 			if (!StitchingInfo::isSuccess(out)) return false;
 			for (int i=0; i<out.size(); ++i) {
 				resultRoisBase.push_back(out[i].resultRois);
-				group[i].projData = out[i].projData.clone();
+				group[i] = out[i];
 			}
 			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
 			for (int i=0; i<out.size(); ++i) {
@@ -334,7 +350,8 @@ bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 				<< " to" << vec2str(v));
 			resultRoisUsedFrameCur = tmp;
 			Mat dummydst;
-			std::vector<Mat> dummysrcs(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			std::vector<Mat> dummysrcs;//(group[0].imgCnt,ImageUtil::createDummyMatRGB(group[0].resizeSz, group[0].srcType));
+			getFromWaitingBuff(v[0],dummysrcs);
 			StitchingInfoGroup out;
 #ifdef TRY_CATCH
 			try {
@@ -352,7 +369,7 @@ bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 #endif
 			if (!StitchingInfo::isSuccess(out)) return false;
 			for (int i=0; i<out.size(); ++i) {
-				group[i].projData = out[i].projData.clone();
+				group[i] = out[i];
 			}
 			assert(out.size() == resultRoisBase.size());
 			pltHelperGroup = std::vector<std::vector<supp::PlaneLinearTransformHelper>>(resultRoisBase.size());
@@ -406,7 +423,25 @@ bool LocalStitchingInfoGroup::adjustPltForLSIG(StitchingInfoGroup &group, const 
 
 void LocalStitchingInfoGroup::addToStitchedBuff(int fidx, Mat& m) {
 	stitchedBuff.push_back(std::make_pair(fidx,m.clone()));
-	removeFromWaitingBuff(fidx);
+	collectGarbage(fidx);
+}
+
+void LocalStitchingInfoGroup::collectGarbage(int fidx) {
+	int del = groups.getRange().first-1;
+	bool ret;
+	do {
+		ret = removeFromWaitingBuff(del);
+		--del;
+	}while(ret);
+
+	ret = true;
+	for (del=fidx; del>=groups.getRange().second && ret; --del) {
+		ret = removeFromWaitingBuff(del);
+	}
+#if (!LSIG_MOVING_WINDOWS)
+	// Tricky
+	if (fidx == groups.getRange().second) dumpWaitingBuffToDisk();
+#endif
 }
 
 void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs, StitchingInfoGroup &ret) {
@@ -437,11 +472,15 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 
 	// Averaging
 	for (int j=0; j<ret.size(); ++j) {
+		if (ret.size() == 4 && j>=2) {
+			break;
+		}
 		ret[j].srcType = (*pSIGs[0])[j].srcType;
 		ret[j].resizeSz = (*pSIGs[0])[j].resizeSz;
 		ret[j].imgCnt = (*pSIGs[0])[j].imgCnt;
 		ret[j].maskRatio = (*pSIGs[0])[j].maskRatio;
 		ret[j].cameras = std::vector<cv::detail::CameraParams>((*pSIGs[0])[j].cameras.size());
+
 		supp::MergeableBestOf2NearestMatcher matcher(false, OpenCVStitchParam().match_conf);
 		matcher.setOnlyFindMatched(true);
 		std::vector<supp::matchesTuple> mtps(r);
@@ -465,13 +504,13 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 			auto estimator = cv::detail::HomographyBasedEstimator();
 			estimator(*retMtp.pfeatures, *retMtp.pmatchesInfos, ret[j].cameras);
 
-			std::vector<std::vector<Mat>> rvec(ret[j].cameras.size());
-			for (int k=0; k<ret[j].cameras.size();++k) {
-				for (int i=0; i<r; ++i) {
-					rvec[k].push_back((*pSIGs[i])[j].cameras[k].R);
-				}
-				supp::_ProjectorBase::getAverRotationMatrix(rvec[k], ret[j].cameras[k].R);
-			}
+			//std::vector<std::vector<Mat>> rvec(ret[j].cameras.size());
+			//for (int k=0; k<ret[j].cameras.size();++k) {
+			//	for (int i=0; i<r; ++i) {
+			//		rvec[k].push_back((*pSIGs[i])[j].cameras[k].R);
+			//	}
+			//	supp::_ProjectorBase::getAverRotationMatrix(rvec[k], ret[j].cameras[k].R);
+			//}
 
 
 			for (size_t i = 0; i < ret[j].cameras.size(); ++i) {

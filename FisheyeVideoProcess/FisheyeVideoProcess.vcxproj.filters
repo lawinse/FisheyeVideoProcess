@@ -62,12 +62,6 @@
     <ClCompile Include="CorrectingUtil.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="StitchingUitl.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="opencvSelfStitching.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="StitchingInfo.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
@@ -78,6 +72,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="OtherUtils\FileUtil.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="OpencvSelfStitching.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="StitchingUtil.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

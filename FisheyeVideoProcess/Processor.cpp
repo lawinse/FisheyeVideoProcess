@@ -19,6 +19,9 @@ Processor::~Processor() {
 
 // Calculate window size of given frameidx
 void Processor::calculateWinSz(int fidx, int &lidx, int &ridx) {
+#if (!LSIG_MOVING_WINDOWS) 
+	fidx=0;
+#endif
 	lidx = max(0, fidx-LSIG_WINDOW_SIZE/2);
 	ridx = min(ttlFrmsCnt, lidx + LSIG_WINDOW_SIZE);
 	lidx = min(lidx, ridx-LSIG_WINDOW_SIZE);
@@ -88,9 +91,10 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 					sInfoGIN,
 					sp,
 					sType);
+			pLSIG->push_back(frameIdx,sInfoGOUT);
 		}
 
-		pLSIG->push_back(frameIdx,sInfoGOUT);
+		
 #ifdef TRY_CATCH
 	} catch(cv::Exception e) {
 		pLSIG->push_back(sInfoGOUT);
@@ -122,7 +126,8 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 			persistPano();
 			calculateWinSz(++curStitchingIdx, leftIdx, rightIdx);
 		} while(curStitchingIdx<ttlFrmsCnt
-			&& pLSIG->cover(leftIdx, rightIdx));
+			&& pLSIG->cover(leftIdx, rightIdx)
+			&& pLSIG->isExistInWaitingBuff(curStitchingIdx));
 		return true;
 	}
 }

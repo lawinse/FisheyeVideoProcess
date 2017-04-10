@@ -19,7 +19,7 @@ class FileUtil {
 private:
 	static std::vector<std::string> waitToDeleteBuff;
 	static bool findOrCreateDir(const char * path);
-	static bool deleteFile(const char * fn);
+	static bool deleteFile(const char * fn, bool delay=false);
 	static std::string getFileNameByFidx(int fidx, std::string elseInfo="",std::string extension=getExtension(NORMAL));
 	static std::string getMatNameByMatidx(int fidx, int midx);
 
@@ -36,7 +36,7 @@ public:
 	static bool findOrCreateAllDirsNeeded();
 	static void persistFrameMats(int fidx, std::vector<cv::Mat> &mats, FILE_STORAGE_TYPE fst=NORMAL);
 	static std::vector<cv::Mat> loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst=NORMAL);
-	static void deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst=NORMAL);
+	static void deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst=NORMAL, bool delay=false);
 	static bool deleteAllTemp();
 	static void compress(const std::string& fname);
 	static void decompress(const std::string&fname);

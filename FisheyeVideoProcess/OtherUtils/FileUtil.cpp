@@ -30,7 +30,12 @@ bool FileUtil::findOrCreateDir(const char * path) {
 
 }
 
-bool FileUtil::deleteFile(const char * fn) {
+bool FileUtil::deleteFile(const char * fn, bool delay) {
+	if (delay) {
+		waitToDeleteBuff.push_back(std::string(fn));
+		LOG_WARN("Fileutil: " << fn << " is pushed into waitToDeleteBuff.")
+		return false;
+	}
 	if(!access(fn,0)) {
 		if (remove(fn)) {
 			LOG_ERR("FileUtil: Failed when deleting " << fn << " (UNKNOWN)");
@@ -114,6 +119,9 @@ std::vector<Mat> FileUtil::loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst
 			storage[getMatNameByMatidx(fidx, i)] >> v[i];	 
 		}
 		storage.release();
+	#ifdef FU_COMPRESS_FLAG
+		deleteFile(fn.c_str());
+	#endif
 	} else if (fst == BIN) {
 		for (int i=0; i<v.size(); ++i) {
 			fn = getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst));
@@ -121,6 +129,9 @@ std::vector<Mat> FileUtil::loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst
 			decompress(fn);
 		#endif
 			LoadMatBinary(fn,v[i]);
+		#ifdef FU_COMPRESS_FLAG
+			deleteFile(fn.c_str());
+		#endif
 		}
 	} else if (fst == LOSSY) {
 		for (int i=0; i<v.size(); ++i) {
@@ -129,21 +140,28 @@ std::vector<Mat> FileUtil::loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst
 			decompress(fn);
 		#endif
 			v[i] = imread(fn,CV_LOAD_IMAGE_UNCHANGED);
+		#ifdef FU_COMPRESS_FLAG
+			deleteFile(fn.c_str());
+		#endif
 		}
 	}
 	return v;
 }
 
-void FileUtil::deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
+void FileUtil::deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst, bool delay) {
+	std::string elseInfo = "";
+#ifdef FU_COMPRESS_FLAG
+	elseInfo = ".cmprs";
+#endif
 	if (fst == NORMAL) {
-		deleteFile(getFileNameByFidx(fidx).c_str());
+		deleteFile((getFileNameByFidx(fidx)+elseInfo).c_str(),delay);
 	} else if (fst == BIN) {
 		for (int i=0; i<sz; ++i) {
-			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)).c_str());
+			deleteFile((getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst))+elseInfo).c_str(), delay);
 		}
 	} else if (fst == LOSSY) {
 		for (int i=0; i<sz; ++i) {
-			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)).c_str());
+			deleteFile((getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst))+elseInfo).c_str(), delay);
 		}
 	}
 }
@@ -217,5 +235,4 @@ void FileUtil::decompress(const std::string&fname) {
 	if(access(FU_RAROBJ,0)) return;
 	std::string cmd = std::string(FU_RAROBJ) + " x -idcdpq "+ fname+".cmprs";               
 	system(cmd.c_str());
-	deleteFile((fname+".cmprs").c_str());
 }

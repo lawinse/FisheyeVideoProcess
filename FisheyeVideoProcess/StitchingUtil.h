@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include ".\Supplements\RewarpableWarper.h"
 #include ".\OtherUtils\IntervalBestValueMaintainer.h"
+#include ".\OtherUtils\FileUtil.h"
 
 #ifdef OPENCV_3
 	#include <opencv2\stitching.hpp>
@@ -120,19 +121,22 @@ public:
 
 /* A window-size of <class StitchingInfoGroup> */
 class LocalStitchingInfoGroup {
-	#define LSIG_WINDOW_SIZE 30		// Set to INT_MAX meaning Global
-	#define LSIG_MOVEING_WINDOWS 1	// Indicate whehter the window is moved or fixed
-	#define LSIG_BEST_CAND_NUM 1
+	#define LSIG_WINDOW_SIZE 10		// Set to INT_MAX meaning Global
+	#define LSIG_MOVING_WINDOWS 0	// Indicate whehter the window is moved or fixed
+	#define LSIG_BEST_CAND_NUM 3
 	#define LSIG_SELECT_NUM LSIG_BEST_CAND_NUM
 	#define LSIG_MAX_STITCHED_BUFF_SIZE 3
-	#define LSIG_MAX_WAITING_BUFF_SIZE 10
+	#define LSIG_MAX_WAITING_BUFF_SIZE 5
 	int wSize;
 	IntervalBestValueMaintainer<StitchingInfoGroup,double> groups;
 	StitchingInfoGroup preSuccessSIG;
 	std::unordered_map<int, std::vector<Mat>> stitchingWaitingBuff;
 	std::unordered_map<int, int> stitchingWaitingBuffPersistedSize;
 	std::vector<std::pair<int, Mat>> stitchedBuff;
-	
+
+	/* Dump stitchingWaitingBuff content to disk for saving memory */
+	void dumpWaitingBuffToDisk();
+
 	// For resultRois
 	std::vector<std::vector<supp::ResultRoi>> resultRoisBase;
 	std::unordered_set<int> resultRoisUsedFrameBase;
@@ -145,6 +149,11 @@ public:
 		groups = IntervalBestValueMaintainer<StitchingInfoGroup,double>(
 			int(LSIG_BEST_CAND_NUM),int(LSIG_WINDOW_SIZE),&StitchingInfo::evaluate);
 	}
+	~LocalStitchingInfoGroup(){
+		for (auto src:stitchingWaitingBuffPersistedSize)
+			FileUtil::deletePersistedFrameMats(src.first,src.second,FileUtil::FILE_STORAGE_MAT_DEFAULT);
+	}
+
 	/* Indicates whether <class LocalStitchingInfoGroup> covers the given range*/
 	bool cover(int l, int r) {return groups.isCandCovered(l,r);}
 	bool empty() const {return groups.getCandNum() == 0;}
@@ -155,7 +164,8 @@ public:
 	/* WaitingBuff stores frames waited to be stitched */
 	void addToWaitingBuff(int fidx, std::vector<Mat>&);
 	bool getFromWaitingBuff(int fidx, std::vector<Mat>& v);
-	void removeFromWaitingBuff(int fidx);
+	bool removeFromWaitingBuff(int fidx);
+	bool isExistInWaitingBuff(int fidx);
 
 	/* StitchedBuff stores frames stitched */
 	bool isStitchedBuffFull() const {return stitchedBuff.size() >= LSIG_MAX_STITCHED_BUFF_SIZE;}
@@ -163,6 +173,7 @@ public:
 	std::vector<std::pair<int, Mat>>* getStitchedBuff() {return &stitchedBuff;}
 	void clearStitchedBuff() {stitchedBuff.clear();}
 
+	void collectGarbage(int fidx);
 	/* Obtain averaged <class StitchingInfoGroup> from <class LocalStitchingInfoGroup> */
 	StitchingInfoGroup getAver(int head, int tail, std::vector<int>&, StitchingUtil &);
 	/* Set <class PlaneLinearTransformHelper> for <class LocalStitchingInfoGroup> */
