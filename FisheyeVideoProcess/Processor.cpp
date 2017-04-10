@@ -4,7 +4,7 @@
 #include "OtherUtils\FileUtil.h"
 
 Processor::Processor(LocalStitchingInfoGroup *_pLSIG) {
-	FileUtil::findOrCreateAllDirsNeeded();
+	FileUtil::findOrCreateAllDirsNeeded();	// create or validate necessary folders and files
 	correctingUtil = CorrectingUtil();
 	stitchingUtil = StitchingUtil();
 	pLSIG = _pLSIG;
@@ -17,6 +17,7 @@ Processor::~Processor() {
 	FileUtil::deleteAllTemp();
 }
 
+// Calculate window size of given frameidx
 void Processor::calculateWinSz(int fidx, int &lidx, int &ridx) {
 	lidx = max(0, fidx-LSIG_WINDOW_SIZE/2);
 	ridx = min(ttlFrmsCnt, lidx + LSIG_WINDOW_SIZE);

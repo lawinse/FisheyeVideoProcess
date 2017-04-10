@@ -8,11 +8,11 @@
 #define OUTPUT_PANO_SIZE Size(2880,1440)
 #define INPUT_FISHEYE_RESIZE Size(1440,1440)
 class Processor {
+#define camCnt 2
 private:
-	VideoCapture vCapture[2];	// 0 stands for front and 1 stands for back, maybe more cam
+	VideoCapture vCapture[camCnt];	// 0 stands for front and 1 stands for back, maybe more cam
 	VideoWriter vWriter;
-	#define camCnt 2
-
+	
 	int radiusOfCircle;
 	Point2i centerOfCircleBeforeResz;
 	Point2i centerOfCircleAfterResz;
@@ -21,28 +21,37 @@ private:
 	Size inputFisheyeResize;
 	Size dstPanoSize;
 
-	int curStitchingIdx;	// will have a gap between fIndex
+	int curStitchingIdx;	// will have a delay gap between fIndex
 
-	// Utils
+	/* Main Utils */
 	CorrectingUtil correctingUtil;
 	StitchingUtil stitchingUtil;
+
+	/* Pointer of <class LSIG> */
 	LocalStitchingInfoGroup *pLSIG;
 	
-	
+	/* Detect the region of interest of fisheye input */
 	void findFisheyeCircleRegion(Mat &);
-	void fisheyeCorrect(Mat &src, Mat &dst);
-	void preProcess(Mat &src, Mat &dst);
-	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
-	void panoRefine(Mat &, Mat &dstImage);
-	void calculateWinSz(int fidx, int &lidx, int &ridx);
-	void persistPano(bool isFlush = false);
+	/* Blacken the pixel outside fisheye ROI */
 	void blackenOutsideRegion(Mat &);
+	/* Calibrate fisheye distortedness */
+	void fisheyeCorrect(Mat &src, Mat &dst);
+	/* Apply some pre-process to input */
+	void preProcess(Mat &src, Mat &dst);
+	/* Stitch */
+	bool panoStitch(std::vector<Mat> &srcs, int frameIdx);
+	/* Apply some refinement to pano */
+	void panoRefine(Mat &, Mat &dstImage);
+	/* Calculate windows boundaries for given fidx */
+	void calculateWinSz(int fidx, int &lidx, int &ridx);
+	/* Persist final pano to disk */
+	void persistPano(bool isFlush = false);
+
 public:
 	Processor(LocalStitchingInfoGroup *);
 	~Processor();
+	/* Set input/output path inpfomation and some initialization */
 	void setPaths(std::string inputPaths[], int inputCnt, std::string outputPath);
+	/* The whole process flow */
 	void process(int maxSecCnt = INT_MAX, int startSecond = 0);
-	
-
-
 };

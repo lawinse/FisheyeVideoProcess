@@ -201,8 +201,7 @@ int MergeableBestOf2NearestMatcher::mergeMatchesTuple(std::vector<matchesTuple> 
 
 	}
 	//system("pause");
-	auto cur = time(0);
-	return mergeVersionCode = rand() + 0x9e3779b9 + (cur << 6) + (cur >> 2);
+	return mergeVersionCode = (rand() ^ time(0));
 }
 
 void MergeableBestOf2NearestMatcher::match(

@@ -6,12 +6,13 @@ extern std::string runtimeHashCode;
 extern std::stringstream sslog;
 extern FILE *fplog;
 
+/* LOG to screen and files */
 
 #ifdef NEED_LOG
 	#define WRITE_LOG(msg,fname) {					\
-		fplog = fopen((fname).c_str(), "a");\
+		fopen_s(&fplog,(fname).c_str(), "a");\
 		sslog.str("");\
-		sslog <<"["<<time(0)<<"]"<< msg;\
+		sslog <<"["<<timetodate(time(0))<<"]"<< msg;\
 		fprintf(fplog,sslog.str().c_str());\
 		fclose(fplog);}
 

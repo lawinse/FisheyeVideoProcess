@@ -166,10 +166,15 @@ StitchingInfoGroup LocalStitchingInfoGroup::getAver(int head, int tail, std::vec
 	selectedFrameIdx.clear();
 	for (int i=0; i<r; ++i) selectedFrameIdx.push_back(tmp[i].first);
 
-	if (selectedFrameIdx.empty() 
+	if (
+#if LSIG_MOVEING_WINDOWS
+		selectedFrameIdx.empty() 
 		|| !resultRoisUsedFrameCur.empty()
 			&& std::unordered_set<int>(selectedFrameIdx.begin(), selectedFrameIdx.end()) == resultRoisUsedFrameCur
-		/*!preSuccessSIG.empty()*/) {
+#else
+		!preSuccessSIG.empty()
+#endif
+		) {
 		LOG_MESS("LSIG: Reuse former SIG, since current selectedFrame is" << vec2str(selectedFrameIdx));
 		selectedFrameIdx = std::vector<int>(resultRoisUsedFrameCur.begin(), resultRoisUsedFrameCur.end());
 		return preSuccessSIG;
@@ -203,7 +208,7 @@ void LocalStitchingInfoGroup::addToWaitingBuff(int fidx, std::vector<Mat>&v) {
 
 	if (stitchingWaitingBuff.size() >= LSIG_MAX_WAITING_BUFF_SIZE) {
 		stitchingWaitingBuffPersistedSize[fidx] = tmpV.size();
-		FileUtil::persistMats(fidx, tmpV, FileUtil::FILE_STORAGE_MAT_DEFAULT);
+		FileUtil::persistFrameMats(fidx, tmpV, FileUtil::FILE_STORAGE_MAT_DEFAULT);
 	} else
 		stitchingWaitingBuff[fidx] = tmpV;
 
@@ -224,7 +229,7 @@ bool LocalStitchingInfoGroup::getFromWaitingBuff(int fidx, std::vector<Mat>& v) 
 		v = (*ret).second; return true;
 	} else if (ret1 != stitchingWaitingBuffPersistedSize.end()) {
 		int sz = (*ret1).second;
-		v = FileUtil::loadMats(fidx, sz, FileUtil::FILE_STORAGE_MAT_DEFAULT);
+		v = FileUtil::loadFrameMats(fidx, sz, FileUtil::FILE_STORAGE_MAT_DEFAULT);
 		return true;
 	} else {
 		LOG_ERR("Cannot find " << fidx << " frame src data.")
@@ -237,7 +242,7 @@ void LocalStitchingInfoGroup::removeFromWaitingBuff(int fidx) {
 	if (stitchingWaitingBuff.find(fidx) != stitchingWaitingBuff.end())
 		stitchingWaitingBuff.erase(fidx);
 	else if (stitchingWaitingBuffPersistedSize.find(fidx) != stitchingWaitingBuffPersistedSize.end()) {
-		FileUtil::deletePersistedMats(fidx,stitchingWaitingBuffPersistedSize[fidx],FileUtil::FILE_STORAGE_MAT_DEFAULT);
+		FileUtil::deletePersistedFrameMats(fidx,stitchingWaitingBuffPersistedSize[fidx],FileUtil::FILE_STORAGE_MAT_DEFAULT);
 		stitchingWaitingBuffPersistedSize.erase(fidx);
 	}
 }
@@ -504,59 +509,5 @@ void StitchingInfo::getAverageSIG(const std::vector<StitchingInfoGroup*> &pSIGs,
 			ret.assign((*pSIGs[0]).begin(),(*pSIGs[0]).end()) ;
 			return;
 		}
-
-	
 	}
-	
-
-	/**
-	for (int j=0; j<ret.size(); ++j) {
-			ret[j].srcType = (*pSIGs[0])[j].srcType;
-			ret[j].imgCnt = (*pSIGs[0])[j].imgCnt;
-			ret[j].maskRatio = (*pSIGs[0])[j].maskRatio;
-			ret[j].cameras = std::vector<cv::detail::CameraParams>((*pSIGs[0])[j].cameras.size());
-			// projData averaging should be calculated in diff way
-			std::vector<Mat> projDatas;
-			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-				ret[j].cameras[camidx].aspect = 0;
-				ret[j].cameras[camidx].focal = 0;
-				ret[j].cameras[camidx].ppx = 0;
-				ret[j].cameras[camidx].ppy = 0;
-			}
-			for (int i=0; i<r; ++i) {
-				
-				// * float warpedImageScale;
-				// * Size resizeSz;
-				// * std::vector<cv::detail::CameraParams> cameras
-				
-				ret[j].resizeSz.width += (*pSIGs[i])[j].resizeSz.width;
-				ret[j].resizeSz.height += (*pSIGs[i])[j].resizeSz.height;
-				projDatas.push_back((*pSIGs[i])[j].projData);
-	
-
-				for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-					ret[j].cameras[camidx].focal += 1.0/(*pSIGs[i])[j].cameras[camidx].focal;
-					ret[j].cameras[camidx].aspect += (*pSIGs[i])[j].cameras[camidx].aspect;
-				
-					ret[j].cameras[camidx].ppx += (*pSIGs[i])[j].cameras[camidx].ppx;
-					ret[j].cameras[camidx].ppy += (*pSIGs[i])[j].cameras[camidx].ppy;
-				}
-
-			}
-			ret[j].resizeSz.width /= r;
-			ret[j].resizeSz.height /= r;
-			for (int camidx = 0; camidx <ret[j].cameras.size(); ++camidx) {
-				ret[j].cameras[camidx].focal /= r;
-				ret[j].cameras[camidx].focal = 1.0/ret[j].cameras[camidx].focal;
-				ret[j].cameras[camidx].aspect /= r;
-				ret[j].cameras[camidx].ppx /= r;
-				ret[j].cameras[camidx].ppy /= r;
-			}
-			//LOG_ERR("before;\n" << projDatas[0]);
-			getAvergeProjData(projDatas, ret[j].projData, ret[j].cameras);
-			//LOG_ERR("after;\n" << ret[j].projData);
-			//system("pause");
-		}
-	**/
-
 }

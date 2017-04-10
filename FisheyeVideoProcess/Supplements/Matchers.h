@@ -10,6 +10,7 @@
 
 #pragma once
 namespace supp {
+	/* cv:detail::FeaturesFinder using AKAZE */
 	class  AKAZEFeaturesFinder : public detail::FeaturesFinder {
 	public:
 		AKAZEFeaturesFinder(int descriptor_type = AKAZE::DESCRIPTOR_MLDB,
@@ -26,6 +27,7 @@ namespace supp {
 		Ptr<AKAZE> akaze;
 	};
 
+	/* cv::detail::FeaturesFinder using SIFT */
 	class SIFTFeaturesFinder : public detail::FeaturesFinder {
 	public:
 		SIFTFeaturesFinder(int nfeatures = 0,
@@ -40,7 +42,7 @@ namespace supp {
 		Ptr<cv::xfeatures2d::SIFT> sift;
 	};
 
-
+	/* Struct to wrap matcher.match input params */
 	struct matchesTuple {
 		std::vector<cv::detail::ImageFeatures> *pfeatures;
 		std::vector<cv::detail::MatchesInfo> *pmatchesInfos;
@@ -56,6 +58,7 @@ namespace supp {
 		}
 	};
 
+	/* cv::detail::BestOf2NearestMatcher appended with matched pairs merging function */
 	class MergeableBestOf2NearestMatcher : public cv::detail::BestOf2NearestMatcher {
 	private:
 		bool onlyFindMatches;
@@ -64,14 +67,19 @@ namespace supp {
 		//std::unordered_map<std::pair<int,int>, cv::detail::ImageFeatures, pairhash> featuresData;
 
 		int mergeVersionCode;	// To ensure consistency
+		/* Get idx pairs needed to find matches */
+		std::vector<std::pair<int,int>> getNearPairs(const std::vector<cv::detail::ImageFeatures> &features,const cv::UMat &mask);
 	public:
 		MergeableBestOf2NearestMatcher(bool try_use_gpu = false, float match_conf = 0.3f, int num_matches_thresh1 = 6,
 			int num_matches_thresh2 = 6)
 			:cv::detail::BestOf2NearestMatcher(try_use_gpu,match_conf,num_matches_thresh1,num_matches_thresh2){
 			onlyFindMatches = isInMergeStatus = false;
 		}
+		/* Set whether only to find matched pairs without filtering inliers*/
 		void setOnlyFindMatched(bool _b) {onlyFindMatches = _b;}
+		/* Set whether it is contains multiple matched pairs from merging op */
 		void setIsInMergeStatus(bool _b) {isInMergeStatus = _b;}
+		/* Deprecated. Intend to verify consistence */
 		bool verifyMergeVersion(int code) {return mergeVersionCode == code;}
 		void match(
 			const cv::detail::ImageFeatures &features1,
@@ -79,8 +87,7 @@ namespace supp {
 			cv::detail::MatchesInfo &matches_info,
 			int pairIdx = -1);
 		void match(const std::vector<cv::detail::ImageFeatures> &features, std::vector<cv::detail::MatchesInfo> &pairwise_matches, const cv::UMat &mask=cv::UMat());
+		/* Merge op */
 		int mergeMatchesTuple(std::vector<matchesTuple> &mtps, matchesTuple &);
-		std::vector<std::pair<int,int>> getNearPairs(const std::vector<cv::detail::ImageFeatures> &features,const cv::UMat &mask);
-
 	};
 }

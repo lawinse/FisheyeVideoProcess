@@ -12,12 +12,13 @@ inline std::string getruntimeHashCode() {
 	return (std::string) hash;
 }
 
+/* Global variables */
 
 #ifdef NEED_LOG
 std::stringstream sslog;
 FILE *fplog;
 #endif
-/* Global variables */
+
 LocalStitchingInfoGroup LSIG;
 Processor processor(&LSIG);
 
@@ -34,7 +35,7 @@ int main(int argc, char ** args) {
 	processor.process(3,0);
 #elif defined(RUN_TEST)
 	TestCase tc;
-	tc.test4();
+	tc.test5();
 	system("pause");
 #endif
 }

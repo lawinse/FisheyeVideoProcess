@@ -1,7 +1,20 @@
 #include "FileUtil.h"
 std::vector<std::string> FileUtil::waitToDeleteBuff = std::vector<std::string>();
 
-FILE_STORAGE_TYPE FileUtil::FILE_STORAGE_MAT_DEFAULT = FILE_STORAGE_TYPE::IMG;
+FILE_STORAGE_TYPE FileUtil::FILE_STORAGE_MAT_DEFAULT = FILE_STORAGE_TYPE::BIN;
+
+std::string FileUtil::getExtension(FILE_STORAGE_TYPE fst) {
+	switch (fst) {
+	case NORMAL:
+		return ".xml";
+	case BIN:
+		return ".bin";
+	case LOSSY:
+		return ".jpg";
+	default:
+		return "";
+	}
+}
 
 bool FileUtil::findOrCreateDir(const char * path) {
 	if (access(path,0) == -1) {
@@ -18,7 +31,7 @@ bool FileUtil::findOrCreateDir(const char * path) {
 }
 
 bool FileUtil::deleteFile(const char * fn) {
-	if(!_access(fn,0)) {
+	if(!access(fn,0)) {
 		if (remove(fn)) {
 			LOG_ERR("FileUtil: Failed when deleting " << fn << " (UNKNOWN)");
 			return false;
@@ -46,39 +59,56 @@ bool FileUtil::findOrCreateAllDirsNeeded() {
 		&& findOrCreateDir(OUTPUT_PATH)
 		&& findOrCreateDir(TEMP_PATH)
 		&& findOrCreateDir(LOG_PATH)) {
-		return true;
+#ifdef FU_COMPRESS_FLAG
+			if (access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files\\WinRAR\\Rar.exe\" .\\rar.exe");
+			if (access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files (x86)\\WinRAR\\Rar.exe\" .\\rar.exe");
+#endif
+			return true;
 	} else {
 		LOG_ERR("FileUtil: Failed when findOrCreateAllDirsNeeded()");
 		return false;
 	}
 }
 
-void FileUtil::persistMats(int fidx, std::vector<Mat> &mats, FILE_STORAGE_TYPE fst) {
+void FileUtil::persistFrameMats(int fidx, std::vector<Mat> &mats, FILE_STORAGE_TYPE fst) {
+	std::string fn;
 	if (fst == NORMAL) {
-		std::string fn = getFileNameByFidx(fidx);
+		fn = getFileNameByFidx(fidx);
 		cv::FileStorage storage(fn, cv::FileStorage::WRITE);
 		for (int i=0; i<mats.size(); ++i) {
 			storage << getMatNameByMatidx(fidx, i) << mats[i];	 
 		}
 		storage.release();
+	#ifdef FU_COMPRESS_FLAG
+		compress(fn);
+	#endif
 	} else if (fst == BIN) {
 		for (int i=0; i<mats.size(); ++i) {
-			SaveMatBinary(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin"),mats[i]);
+			SaveMatBinary(fn=getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)),mats[i]);
+		#ifdef FU_COMPRESS_FLAG
+			compress(fn);
+		#endif
 		}
-	} else if (fst == IMG) {
-		std::vector<int>p(2);p[0] = CV_IMWRITE_PNG_COMPRESSION,p[1]=0;
+	} else if (fst == LOSSY) {
+		std::vector<int>p(2);p[0] = CV_IMWRITE_JPEG_QUALITY,p[1]=100;
 		for (int i=0; i<mats.size(); ++i) {
-			imwrite(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png"),mats[i],p);
+			imwrite(fn=getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)),mats[i],p);
+		#ifdef FU_COMPRESS_FLAG
+			compress(fn);
+		#endif
 		}
 	}
 
 }
 
-std::vector<Mat> FileUtil::loadMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
+std::vector<Mat> FileUtil::loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 	std::vector<Mat> v(sz);
+	std::string fn;
 	if (fst == NORMAL) {
-		std::string fn = getFileNameByFidx(fidx);
-		
+		fn = getFileNameByFidx(fidx);
+	#ifdef FU_COMPRESS_FLAG
+		decompress(fn);
+	#endif
 		cv::FileStorage storage(fn, cv::FileStorage::READ);
 		for (int i=0; i<sz; ++i) {
 			storage[getMatNameByMatidx(fidx, i)] >> v[i];	 
@@ -86,26 +116,34 @@ std::vector<Mat> FileUtil::loadMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 		storage.release();
 	} else if (fst == BIN) {
 		for (int i=0; i<v.size(); ++i) {
-			LoadMatBinary(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin"),v[i]);
+			fn = getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst));
+		#ifdef FU_COMPRESS_FLAG
+			decompress(fn);
+		#endif
+			LoadMatBinary(fn,v[i]);
 		}
-	} else if (fst == IMG) {
+	} else if (fst == LOSSY) {
 		for (int i=0; i<v.size(); ++i) {
-			v[i] = imread(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png"),CV_LOAD_IMAGE_UNCHANGED);
+			fn = getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst));
+		#ifdef FU_COMPRESS_FLAG
+			decompress(fn);
+		#endif
+			v[i] = imread(fn,CV_LOAD_IMAGE_UNCHANGED);
 		}
 	}
 	return v;
 }
 
-void FileUtil::deletePersistedMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
+void FileUtil::deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst) {
 	if (fst == NORMAL) {
 		deleteFile(getFileNameByFidx(fidx).c_str());
 	} else if (fst == BIN) {
 		for (int i=0; i<sz; ++i) {
-			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".bin").c_str());
+			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)).c_str());
 		}
-	} else if (fst == IMG) {
+	} else if (fst == LOSSY) {
 		for (int i=0; i<sz; ++i) {
-			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),".png").c_str());
+			deleteFile(getFileNameByFidx(fidx,getMatNameByMatidx(fidx, i),getExtension(fst)).c_str());
 		}
 	}
 }
@@ -167,4 +205,17 @@ bool FileUtil::readMatBinary(std::ifstream& ifs, cv::Mat& in_mat) {
 bool FileUtil::LoadMatBinary(const std::string& filename, cv::Mat& output) {
 	std::ifstream ifs(filename, std::ios::binary);
 	return readMatBinary(ifs, output);
+}
+
+void FileUtil::compress(const std::string&fname) {
+	if(access(FU_RAROBJ,0)) return;
+	std::string cmd = std::string(FU_RAROBJ) + " a -df -m5 -idcdpq "+ fname+".cmprs" + " " + fname;                  
+	system(cmd.c_str());
+}
+
+void FileUtil::decompress(const std::string&fname) {
+	if(access(FU_RAROBJ,0)) return;
+	std::string cmd = std::string(FU_RAROBJ) + " x -idcdpq "+ fname+".cmprs";               
+	system(cmd.c_str());
+	deleteFile((fname+".cmprs").c_str());
 }

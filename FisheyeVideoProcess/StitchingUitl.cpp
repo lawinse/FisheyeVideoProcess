@@ -493,7 +493,7 @@ std::vector<Rect> StitchingUtil::getMaskROI(const Mat &srcImage, int index, int 
 		ret.push_back(Rect(0,0,srcImage.cols, round(srcImage.rows*heightParam)));
 	} else {
 		if (index < total - 1) 
-			ret.push_back(Rect(round(srcImage.cols*(1-widthParam)),0,round(srcImage.cols*widthParam),round(srcImage.rows*heightParam)));
+			ret.push_back(Rect(srcImage.cols-round(srcImage.cols*(widthParam)),0,round(srcImage.cols*widthParam),round(srcImage.rows*heightParam)));
 		if (index > 0) 
 			ret.push_back(Rect(0,0,round(srcImage.cols*widthParam),round(srcImage.rows*heightParam)));
 	}

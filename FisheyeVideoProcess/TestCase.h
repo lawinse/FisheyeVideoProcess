@@ -3,6 +3,7 @@
 #include "StitchingUtil.h"
 #include "OtherUtils\ImageUtil.h"
 #include "Supplements\RewarpableWarper.h"
+#include "OtherUtils\FileUtil.h"
 #include "MyLog.h"
 #include <algorithm>
 using namespace std;
@@ -65,5 +66,10 @@ public:
 		supp::_ProjectorBase::getAverRotationMatrix(rots, ret);
 		std::cout << ret << std::endl;
 	}
+
+	void test5() {
+		FileUtil::decompress(TEMP_PATH+std::string("58e6f398_24M58e6f398241.bin"));
+	}
+
 
 };

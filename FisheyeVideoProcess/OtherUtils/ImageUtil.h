@@ -2,6 +2,7 @@
 #include "..\Config.h"
 class ImageUtil {
 public:
+	/* USM sharpening process */
 	static void USM(Mat &src, Mat &dst) {
 		Mat blur, tmp2; 
 		double amount=1.0;
@@ -15,22 +16,26 @@ public:
 		dst = tmp2;
 	}
 
+	/* Laplace enhancement process */
 	static void LaplaceEnhannce(Mat &src, Mat &dst) {
 		Mat k = (Mat_<int>(3,3) <<0,-1,0,-1,5,-1,0,-1,0);
 		filter2D(src,dst,src.depth(),k);
 	}
 
+	/* Create an all-black 3-channels Mat of given size and type */
 	static Mat createDummyMatRGB(Size sz, int src_type) {
 		Mat m(sz, src_type,Scalar(255,255,255));
 		return m;
 	}
 
+	/* Auto-adjust resize op */
 	inline static void ImageUtil::resize(InputArray src, OutputArray dst, Size dsize, double fx = 0, double fy = 0) {
 		src.size().area() > dsize.area()
 			? cv::resize(src, dst, dsize, fx, fy, CV_INTER_AREA)
 			: cv::resize(src, dst, dsize, fx, fy, CV_INTER_CUBIC);
 	}
 
+	/* More conveneient way to use cv::imshow */
 	static void imshow(char * winName, Mat img, double ratio = 1.0, bool holdon = false) {
 		Mat tmp;
 		ImageUtil::resize(img,tmp,Size(img.cols*ratio, img.rows*ratio));
@@ -38,6 +43,7 @@ public:
 		if (holdon) cvWaitKey();
 	}
 
+	/* BGR-Equalization process */
 	static void equalizeHistBGR(Mat &src, Mat &dst) {
 		if (src.channels()<3) {
 			LOG_WARN("ImageUtil: failed in equalizeHistBGR (less than 3 channels)");
@@ -52,6 +58,7 @@ public:
 		}
 	}
 
+	/* Batch ops supported */
 	static void batchOperation(std::vector<Mat> &srcs, std::vector<Mat> &dsts, void (*op)(Mat &src, Mat &dst)) {
 		if (dsts.size() != srcs.size()) dsts = std::vector<Mat>(srcs.size());
 		for (int i=0; i<srcs.size(); ++i) op(srcs[i],dsts[i]);

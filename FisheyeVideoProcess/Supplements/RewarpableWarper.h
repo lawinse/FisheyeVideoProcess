@@ -7,12 +7,15 @@
 
 
 namespace supp{
+	/* ResultROI after warping. imgIdx is useful in <class StitchingInfo> averaging op */
 	struct ResultRoi {
 			Size srcSz;
 			Rect roi;
 			int imgIdx;
 			ResultRoi(Size _sz, Rect _roi, int _iid):srcSz(_sz),roi(_roi),imgIdx(_iid){};
 		};
+
+	/* 2D Linear Transform */
 	struct PlaneLinearTransformHelper {
 #define PLT_ADJUST_TYPE 0	//0->BOTH, 1->X_AXIS, 2->Y_AXIS 3->ONLY_SCALE
 		float ax,bx,ay,by;
@@ -47,6 +50,8 @@ namespace supp{
 
 	};
 
+
+/* The following structs/classes are intended to append rewarp-ability to the original cv warper*/
 
 // Spherical, Cylinderical, Mercator
 	struct _ProjectorBase : public cv::detail::ProjectorBase {

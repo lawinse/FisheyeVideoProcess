@@ -68,7 +68,7 @@ struct CorrectingParams {
 			v.push_back((int)round(w.y*10000));
 		}
 		int ret = 0;
-		for (auto i:v) ret += 0x9e3779b9+((std::hash<int>()(i))<<6)+((std::hash<int>()(i))>>2);
+		for (auto i:v) hash_combine(ret,i);
 		return ret;
 	}
 
@@ -88,16 +88,17 @@ struct CorrectingParams {
 	}
 };
 
+/* Memorization for collection mapping, avoiding repeat calculation */
 struct ReMapping{
-	// For memorization   map[dst] = src;
 	bool bMapped;
 	struct pairhash {//double hash function for pair key
 public:
 	template <typename T, typename U>
 	size_t operator()(const std::pair<T, U> &rhs) const {
-		size_t l = std::hash<T>()(rhs.first);
-		size_t r = std::hash<U>()(rhs.second);
-		return l + 0x9e3779b9 + (r << 6) + (r >> 2);
+		int seed = 0;
+		hash_combine(seed, rhs.first);
+		hash_combine(seed, rhs.second);
+		return seed;
 	}
 };
 
@@ -191,14 +192,10 @@ public:
 		}
 #endif
 	}
-
-
 };
 
 class CorrectingUtil {
 private:
-	
-
 	ReMapping pixelReMapping;
 	CorrectingParams _cParams;
 	void basicCorrecting(Mat &src, Mat &dst, CorrectingType ctype);
@@ -207,15 +204,18 @@ private:
 	void PLLMCLMCorrentingReversed(
 		Mat &src, Mat &dst, Point2i center, int radius, DistanceMappingType dmtype);	// w = PI/2
 	void LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int radius, CorrectingType ctype, Point2d w);	// w unfixed
+	
 	// helper function
-	double getPhiFromV(double v);
+	double getPhiFromV(double v);	// Derived from the original formula
 	void rotateEarth(double &x, double &y, double &z);
 
 	double getPhiFromV_ufixed(double v, double w) const ;
 	double getLFromPhi_ufixed(double phi, double w) const;
 	double _equation_ufixed(double v, double phi, double w) const;
+
 public:
 	CorrectingUtil(){pixelReMapping = ReMapping();}
 	~CorrectingUtil(){};
+	/* Correcting interface */
 	void doCorrect(Mat &srcImage, Mat &dstImage, CorrectingParams cParams = CorrectingParams());
 };
