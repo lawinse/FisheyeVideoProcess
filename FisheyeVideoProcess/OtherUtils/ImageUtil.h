@@ -35,6 +35,13 @@ public:
 			: cv::resize(src, dst, dsize, fx, fy, CV_INTER_CUBIC);
 	}
 
+	static void batchResize(std::vector<Mat> &srcs, std::vector<Mat> &dsts, Size dsize) {
+		dsts.resize(srcs.size());
+		for (int i=0; i<srcs.size(); ++i) {
+			ImageUtil::resize(srcs[i],dsts[i],dsize);
+		}
+	}
+
 	/* More conveneient way to use cv::imshow */
 	static void imshow(char * winName, Mat img, double ratio = 1.0, bool holdon = false) {
 		Mat tmp;

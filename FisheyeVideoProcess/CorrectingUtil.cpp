@@ -392,7 +392,9 @@ void CorrectingUtil::PLLMCLMCorrentingReversed(
 			switch (dmtype) {
 			case LONG_LAT:
 				lat = getPhiFromV((double)j*4.0/dstImage.rows);
-				lon = getPhiFromV((double)i*4.0/dstImage.cols);
+				//lon = getPhiFromV((double)i*4.0/dstImage.cols);
+				//lat = lat_offset+j*dy;
+				lon = lon_offset+i*dx;
 
 				x = -sin(lat)*cos(lon);
 				y = cos(lat);
@@ -458,9 +460,9 @@ void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int 
 		for (int j=0; j<dst.rows; ++j)
 			for (int i=0; i<dst.cols; ++i) {
 				lat = getPhiFromV_ufixed(j*lat_max / dst.rows, w_lat);
-				lon = getPhiFromV_ufixed(i*lon_max / dst.cols, w_lon);
+				//lon = getPhiFromV_ufixed(i*lon_max / dst.cols, w_lon);
 				//lat = lat_offset+j*dy;
-				//lon = lon_offset+i*dx;
+				lon = lon_offset+i*dx;
 
 				x = -sin(lat)*cos(lon);
 				y = cos(lat);
@@ -510,9 +512,9 @@ void CorrectingUtil::LLMCLMUFCorrecting(Mat &src, Mat &dst, Point2i center, int 
 				lon = cvFastArctan(z,-x)*PI/180;
 
 				v_dst = src.rows*(lat_max/2-getLFromPhi_ufixed(lat, w_lat)) / lat_max;
-				u_dst = src.cols*(lon_max/2-getLFromPhi_ufixed(lon, w_lon)) / lon_max;
-				/*u_dst = (lon-lon_offset)/dx;
-				v_dst = (lat-lat_offset)/dy;*/
+				//u_dst = src.cols*(lon_max/2-getLFromPhi_ufixed(lon, w_lon)) / lon_max;
+				u_dst = (lon-lon_offset)/dx;
+				//v_dst = (lat-lat_offset)/dy;
 
 				if (u_dst < 0 || u_dst >= dst.rows || v_dst < 0 || v_dst >= dst.cols)
 						continue;

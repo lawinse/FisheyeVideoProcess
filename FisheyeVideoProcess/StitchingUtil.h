@@ -123,7 +123,7 @@ public:
 class LocalStitchingInfoGroup {
 	#define LSIG_WINDOW_SIZE 10		// Set to INT_MAX meaning Global
 	#define LSIG_MOVING_WINDOWS 0	// Indicate whehter the window is moved or fixed
-	#define LSIG_BEST_CAND_NUM 3
+	#define LSIG_BEST_CAND_NUM 1
 	#define LSIG_SELECT_NUM LSIG_BEST_CAND_NUM
 	#define LSIG_MAX_STITCHED_BUFF_SIZE 3
 	#define LSIG_MAX_WAITING_BUFF_SIZE 5

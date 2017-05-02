@@ -192,6 +192,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 			for (int i=0; i<camCnt; ++i) {
 				/*blackenOutsideRegion(srcFrms[i]);*/
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
+				//ImageUtil::imshow("dstFrm",dstFrms[i],0.5,true);
 				
 			}
 			std::cout << "\tStitching ..." <<std::endl;

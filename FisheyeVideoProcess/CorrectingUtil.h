@@ -28,7 +28,7 @@ enum DistanceMappingType {
 	PERSPECTIVE,
 };
 
-#define camFieldAngle (180*PI/180.0)
+#define camFieldAngle (230*PI/180.0)
 #define focusLen 450.0 /* TOSOLVE: the value remains to be tuned */
 
 struct CorrectingParams {
