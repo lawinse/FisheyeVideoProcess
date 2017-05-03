@@ -416,11 +416,9 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 				Range(max(0,int(sInfoG[1].ranges[0].end-ratio_2*sInfoG[1].ranges[0].size())),
 					min(dstBF.cols,int(sInfoG[1].ranges[1].start+ratio_2*sInfoG[1].ranges[1].size()))))
 				.clone());
-		// Resize
-		ImageUtil::batchResize(tmpSrc, tmpSrcRsz, FIX_RESIZE_1);
 		// dstTmp: F-B-F
-		StitchingUtil::osParam.blend_strength = 1;
-		sInfoG.push_back(_stitch(tmpSrc,dstTmp,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[2], FIX_RESIZE_1,std::make_pair(overlapRatio_tolerance,0.7)));	
+		StitchingUtil::osParam.blend_strength = 0;
+		sInfoG.push_back(_stitch(tmpSrc,dstTmp,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[2], FIX_RESIZE_1,std::make_pair(overlapRatio_tolerance,0.8)));	
 		//imshow("FBF",dstTmp);
 		//cvWaitKey();
 		if (!StitchingInfo::isSuccess(sInfoG)) return sInfoG;
@@ -429,10 +427,8 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 			dstTmp(Range(0,dstTmp.rows), sInfoG[2].ranges[1]).clone());
 		tmpSrc.push_back(
 			dstTmp(Range(0,dstTmp.rows), sInfoG[2].ranges[0]).clone());
-		// Resize
-		ImageUtil::batchResize(tmpSrc, tmpSrcRsz, FIX_RESIZE_2);
-		StitchingUtil::osParam.blend_strength = 1;
-		sInfoG.push_back(_stitch(tmpSrc,dstImage,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[3], FIX_RESIZE_2,std::make_pair(overlapRatio_tolerance,0.7)));
+		StitchingUtil::osParam.blend_strength = 0;
+		sInfoG.push_back(_stitch(tmpSrc,dstImage,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[3], FIX_RESIZE_2,std::make_pair(overlapRatio_tolerance,0.8)));
 
 		//ImageUtil::imshow("dstImage", dstImage, 0.5,true);
 

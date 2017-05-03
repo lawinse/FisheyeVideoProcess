@@ -17,6 +17,9 @@ using namespace cv;
 #define LOG_PATH ".\\Logs\\"
 
 
+#define INPUT_FISHEYE_LENGTH 1440
+
+
 #define OPENCV_3
 #ifndef OPENCV_3
 	#define OPENCV_2

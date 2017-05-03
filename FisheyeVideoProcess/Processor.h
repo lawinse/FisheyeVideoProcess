@@ -5,8 +5,8 @@
 #include "CorrectingUtil.h"
 
 
-#define OUTPUT_PANO_SIZE Size(2880,1440)
-#define INPUT_FISHEYE_RESIZE Size(1440,1440)
+#define INPUT_FISHEYE_RESIZE Size(INPUT_FISHEYE_LENGTH,INPUT_FISHEYE_LENGTH)
+#define OUTPUT_PANO_SIZE Size(INPUT_FISHEYE_LENGTH*2,INPUT_FISHEYE_LENGTH)
 class Processor {
 #define camCnt 2
 private:

@@ -34,6 +34,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	StitchingInfo sInfo;
 
 	double work_scale = 1, seam_scale = 1, compose_scale = 1;
+	bool is_work_scale_set = false, is_seam_scale_set = false, is_compose_scale_set = false;
 	double seam_work_aspect = 1;
 	Mat full_img1,full_img, img;
 	int imgCnt = srcs.size(); 
@@ -57,14 +58,25 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		sInfo.srcType = sInfoNotNull.srcType;
 		for (int i = 0; i < imgCnt; ++i) {
 			full_img1 = srcs[i].clone();
-			//LOG_WARN("Orig Size:" << full_img1.size());
-			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
 			ImageUtil::resize(full_img1,full_img, sInfo.resizeSz,0,0);
 			full_img_sizes[i] = full_img.size();
-			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
-			ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
-			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
-			seam_work_aspect = seam_scale / work_scale;
+			if (osParam.workMegapix < 0) {
+				img = full_img;
+				work_scale = 1;
+				is_work_scale_set = true;
+			} else {
+				if (!is_work_scale_set) {
+					work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
+					is_work_scale_set = true;
+				}
+				ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
+
+			}
+			if (!is_seam_scale_set) {
+				seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
+				seam_work_aspect = seam_scale / work_scale;
+				is_seam_scale_set = true;
+			}
 			ImageUtil::resize(full_img, img, Size(), seam_scale, seam_scale);
 			images[i] = img.clone();
 		}
@@ -84,11 +96,26 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			//assert(full_img1.size().width >= resizeSz[i].width && full_img1.size().height >= resizeSz[i].height);
 			ImageUtil::resize(full_img1,full_img, sInfo.resizeSz, 0,0);
 			full_img_sizes[i] = full_img.size();
-			work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
 
-			ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
-			seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
-			seam_work_aspect = seam_scale / work_scale;
+			if (osParam.workMegapix < 0) {
+				img = full_img;
+				work_scale = 1;
+				is_work_scale_set = true;
+			} else {
+				if (!is_work_scale_set) {
+					work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
+					is_work_scale_set = true;
+				}
+				ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
+
+			}
+
+			if (!is_seam_scale_set) {
+				seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
+				seam_work_aspect = seam_scale / work_scale;
+				is_seam_scale_set = true;
+			}
+
 			(*finder)(img, features[i],StitchingUtil::getMaskROI(img, i,imgCnt, sInfo.maskRatio));
 			//LOG_MESS(features[i].keypoints[0].pt.x << "," <<features[i].keypoints[0].pt.y);
 			//LOG_MESS(features[i].keypoints[1].pt.x << "," <<features[i].keypoints[1].pt.y);system("pause");
@@ -232,34 +259,36 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		// reCalculate corner and mask since the former estimation is based on work_scale
 		
 		full_img1 = srcs[img_idx].clone();
-		ImageUtil::resize(full_img1,full_img, sInfo.resizeSz, 0,0);
-		compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
-		compose_work_aspect = compose_scale / work_scale;
-		warped_image_scale *= static_cast<float>(compose_work_aspect);
-		//warper = warper_creator->create(warped_image_scale);
-		warper->setScale(warped_image_scale);
+		ImageUtil::resize(full_img1,full_img, sInfo.resizeSz,0,0);
+		if (!is_compose_scale_set) {
+			if (osParam.composeMegapix > 0) 
+				compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
+			is_compose_scale_set = true;
+			compose_work_aspect = compose_scale / work_scale;
+			warped_image_scale *= static_cast<float>(compose_work_aspect);
+			//warper = warper_creator->create(warped_image_scale);
+			warper->setScale(warped_image_scale);
+			// Update
+			for (int i = 0; i < imgCnt; ++i) {
+				cameras[i].focal *= compose_work_aspect;
+				cameras[i].ppx *= compose_work_aspect;
+				cameras[i].ppy *= compose_work_aspect;
 
-		// Update
-		for (int i = 0; i < imgCnt; ++i) {
-			cameras[i].focal *= compose_work_aspect;
-			cameras[i].ppx *= compose_work_aspect;
-			cameras[i].ppy *= compose_work_aspect;
 
+				Size sz = full_img_sizes[i];
+				if (std::abs(compose_scale - 1) > 1e-1) {
+					sz.width = round(full_img_sizes[i].width * compose_scale);
+					sz.height = round(full_img_sizes[i].height * compose_scale);
+				}
 
-			Size sz = full_img_sizes[i];
-			if (std::abs(compose_scale - 1) > 1e-1) {
-				sz.width = round(full_img_sizes[i].width * compose_scale);
-				sz.height = round(full_img_sizes[i].height * compose_scale);
+				Mat K;
+				cameras[i].K().convertTo(K, CV_32F);
+				warper->setCurrentImageIdx(i);
+				Rect roi = warper->warpRoi(sz, K, cameras[i].R);
+				corners[i] = roi.tl();
+				sizes[i] = roi.size();
 			}
-
-			Mat K;
-			cameras[i].K().convertTo(K, CV_32F);
-			warper->setCurrentImageIdx(i);
-			Rect roi = warper->warpRoi(sz, K, cameras[i].R);
-			corners[i] = roi.tl();
-			sizes[i] = roi.size();
 		}
-	
 		if (abs(compose_scale - 1) > 1e-1)
 			ImageUtil::resize(full_img, img, Size(), compose_scale, compose_scale);
 		else
@@ -282,7 +311,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		mask.release();
 
 		dilate(masks_warped[img_idx], dilated_mask, Mat());
-		ImageUtil::resize(dilated_mask, seam_mask, mask_warped.size(),0,0);
+		ImageUtil::resize(dilated_mask, seam_mask, mask_warped.size());
 		mask_warped = seam_mask & mask_warped;
 		if (blender.empty()) {
 			blender = Blender::createDefault(osParam.blend_type, false);

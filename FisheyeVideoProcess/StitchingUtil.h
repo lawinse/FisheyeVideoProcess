@@ -57,9 +57,9 @@ struct OpenCVStitchParam {
 		bool isRealStitching;
 
 		OpenCVStitchParam() {
-			workMegapix = 0.8;
+			workMegapix = 0.6;
 			seamMegapix = 0.1;
-			composeMegapix = 0.8;
+			composeMegapix = -1;
 			conf_thresh = 0.7;
 			wave_correct = cv::detail::WAVE_CORRECT_HORIZ;
 			expos_comp_type = cv::detail::ExposureCompensator::GAIN_BLOCKS;
@@ -196,8 +196,9 @@ private:
 
 	/* Unify the resized size of each step */
 	#define FIX_RESIZE_0 Size(1440,1440)
-	#define FIX_RESIZE_1 Size(2020,1440)
-	#define FIX_RESIZE_2 Size(1750,1440)
+	#define FIX_RESIZE_1 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
+	#define FIX_RESIZE_2 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
+
 	
 	/* Original opencv Stitcher. Deprecated*/
 	StitchingInfo opencvStitching(const std::vector<Mat> &srcs, Mat &dstImage, StitchingType sType);

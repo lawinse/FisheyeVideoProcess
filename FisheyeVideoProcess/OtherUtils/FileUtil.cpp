@@ -1,5 +1,5 @@
 #include "FileUtil.h"
-std::vector<std::string> FileUtil::waitToDeleteBuff = std::vector<std::string>();
+std::unordered_set<std::string> FileUtil::waitToDeleteBuff = std::unordered_set<std::string>();
 
 FILE_STORAGE_TYPE FileUtil::FILE_STORAGE_MAT_DEFAULT = FILE_STORAGE_TYPE::BIN;
 
@@ -32,7 +32,7 @@ bool FileUtil::findOrCreateDir(const char * path) {
 
 bool FileUtil::deleteFile(const char * fn, bool delay) {
 	if (delay) {
-		waitToDeleteBuff.push_back(std::string(fn));
+		waitToDeleteBuff.insert(std::string(fn));
 		LOG_WARN("Fileutil: " << fn << " is pushed into waitToDeleteBuff.")
 		return false;
 	}
@@ -151,7 +151,7 @@ std::vector<Mat> FileUtil::loadFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst
 void FileUtil::deletePersistedFrameMats(int fidx, int sz, FILE_STORAGE_TYPE fst, bool delay) {
 	std::string elseInfo = "";
 #ifdef FU_COMPRESS_FLAG
-	elseInfo = ".cmprs";
+	elseInfo = FU_COMPRESS_EXTENSION;
 #endif
 	if (fst == NORMAL) {
 		deleteFile((getFileNameByFidx(fidx)+elseInfo).c_str(),delay);
@@ -227,12 +227,13 @@ bool FileUtil::LoadMatBinary(const std::string& filename, cv::Mat& output) {
 
 void FileUtil::compress(const std::string&fname) {
 	if(access(FU_RAROBJ,0)) return;
-	std::string cmd = std::string(FU_RAROBJ) + " a -df -m5 -idcdpq "+ fname+".cmprs" + " " + fname;                  
+	std::string cmd = std::string(FU_RAROBJ) + " a -df -m5 -idcdpq "+ fname+FU_COMPRESS_EXTENSION + " " + fname;
+	waitToDeleteBuff.insert(fname+FU_COMPRESS_EXTENSION);
 	system(cmd.c_str());
 }
 
 void FileUtil::decompress(const std::string&fname) {
 	if(access(FU_RAROBJ,0)) return;
-	std::string cmd = std::string(FU_RAROBJ) + " x -idcdpq "+ fname+".cmprs";               
+	std::string cmd = std::string(FU_RAROBJ) + " x -idcdpq "+ fname+FU_COMPRESS_EXTENSION;               
 	system(cmd.c_str());
 }

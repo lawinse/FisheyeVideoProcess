@@ -35,12 +35,26 @@ public:
 			: cv::resize(src, dst, dsize, fx, fy, CV_INTER_CUBIC);
 	}
 
+	inline static void ImageUtil::resizeHeightBased(Mat &src, Mat &dst, int height) {
+		double ratio = height*1.0/src.size().height;
+		int width = src.size().width*ratio;
+		ImageUtil::resize(src,dst,Size(width,height));
+	}
+
 	static void batchResize(std::vector<Mat> &srcs, std::vector<Mat> &dsts, Size dsize) {
 		dsts.resize(srcs.size());
 		for (int i=0; i<srcs.size(); ++i) {
 			ImageUtil::resize(srcs[i],dsts[i],dsize);
 		}
 	}
+
+	static void batchResizeHeightBased(std::vector<Mat> &srcs, std::vector<Mat> &dsts, int height) {
+		dsts.resize(srcs.size());
+		for (int i=0; i<srcs.size(); ++i) {
+			ImageUtil::resizeHeightBased(srcs[i],dsts[i],height);
+		}
+	}
+
 
 	/* More conveneient way to use cv::imshow */
 	static void imshow(char * winName, Mat img, double ratio = 1.0, bool holdon = false) {

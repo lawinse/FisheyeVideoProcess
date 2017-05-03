@@ -2,6 +2,7 @@
 #include <direct.h>
 #include <io.h>
 #include <vector>
+#include <unordered_set>
 #include <fstream>
 
 #pragma once
@@ -16,8 +17,9 @@ enum FILE_STORAGE_TYPE {
 class FileUtil {
 #define FU_COMPRESS_FLAG 
 #define FU_RAROBJ ".\\rar.exe "
+#define FU_COMPRESS_EXTENSION ".cmprs "
 private:
-	static std::vector<std::string> waitToDeleteBuff;
+	static std::unordered_set<std::string> waitToDeleteBuff;
 	static bool findOrCreateDir(const char * path);
 	static bool deleteFile(const char * fn, bool delay=false);
 	static std::string getFileNameByFidx(int fidx, std::string elseInfo="",std::string extension=getExtension(NORMAL));
