@@ -7,6 +7,7 @@
 
 void StitchingInfo::clear() {
 	imgCnt = 0;
+	nonBlackRatio = 0.0;
 	ranges.clear();
 	cameras.clear();
 	resultRois.clear();
@@ -99,17 +100,12 @@ std::ostream& operator <<(std::ostream& out, const StitchingInfo& sInfo) {
 
 bool StitchingInfo::isSuccess() const {
 	if (isNull()) return false;
-	if (cameras.size() == 2) {
-		double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
-		return relative_focal_ratio >= ERR && relative_focal_ratio < 0.1 && nonBlackRatio >= NONBLACK_REMAIN_FLOOR;
-	} else {
-		return nonBlackRatio >= NONBLACK_REMAIN_FLOOR;
-	}
+	return nonBlackRatio >= NONBLACK_REMAIN_FLOOR;
 }
 
 double StitchingInfo::evaluate() const{
 	// TODO: to refine
-	return isSuccess() ? nonBlackRatio : 0.0;
+	return isSuccess() ? nonBlackRatio*100 : 0.0;
 }
 
 bool StitchingInfo::isSuccess(const StitchingInfoGroup &group) {
@@ -120,12 +116,13 @@ bool StitchingInfo::isSuccess(const StitchingInfoGroup &group) {
 }
 
 double StitchingInfo::evaluate(const StitchingInfoGroup &group) {
-	if (!StitchingInfo::isSuccess(group)) {
+	if (group.size() == 0 || !StitchingInfo::isSuccess(group)) {
 		return 0.0;
 	} else {
 		double sum_val = 1.0;
 		if (group.size() == 4) {
-			sum_val *= min(group[0].evaluate(),group[1].evaluate())*group[2].evaluate()*group[3].evaluate();
+			sum_val *= min(group[0].evaluate(),group[1].evaluate())\
+				*group[2].evaluate()*group[3].evaluate();
 		} else {
 			for (StitchingInfo sinfo:group) sum_val *= sinfo.evaluate();
 		}

@@ -37,6 +37,13 @@ public:
 			LOG_ERR(this);
 			return false;
 		}
+
+		if (idxMap.find(fidx) != idxMap.end()) {
+			LOG_WARN("IntervalBestValueMaintainer: " << fidx << " frames data exists.");
+			return false;
+		}
+
+
 		range.second++;
 
 		// first evict item outside range
@@ -91,6 +98,7 @@ public:
 		if (idxMap.find(fidx) != idxMap.end()) {
 			return (*(idxMap[fidx])).first.first;
 		} else {
+			LOG_MESS(this);
 			return ItemType();
 		}
 	}

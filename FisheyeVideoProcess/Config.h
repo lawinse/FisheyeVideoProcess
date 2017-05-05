@@ -16,6 +16,10 @@ using namespace cv;
 #define TEMP_PATH ".\\Temp\\"
 #define LOG_PATH ".\\Logs\\"
 
+#define RT_WIN32
+#ifndef RT_WIN32
+	#define RT_X64
+#endif
 
 #define INPUT_FISHEYE_LENGTH 1440
 
@@ -33,7 +37,7 @@ using namespace cv;
 	#define RUN_TEST
 #endif
 //#define SHOW_IMAGE
-//#define TRY_CATCH
+#define TRY_CATCH
 
 const double M_PI = PI;
 const double ERR = 1e-7;

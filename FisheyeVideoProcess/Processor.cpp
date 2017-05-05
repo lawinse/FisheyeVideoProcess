@@ -97,8 +97,8 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 		
 #ifdef TRY_CATCH
 	} catch(cv::Exception e) {
-		pLSIG->push_back(sInfoGOUT);
-		throw e;
+		LOG_ERR("Stitching failed at " << frameIdx << " frame.");
+		pLSIG->push_back(frameIdx,sInfoGOUT);
 	}
 #endif
 
@@ -135,8 +135,9 @@ bool Processor::panoStitch(std::vector<Mat> &srcs, int frameIdx) {
 void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 	Mat tmp, tmp2;
 	tmp = srcImage.clone();
-	// USM
 	ImageUtil::resize(tmp, tmp, dstPanoSize,0,0);
+	//ImageUtil::equalizeHistBGR(tmp,tmp);
+	ImageUtil::brightnessAndContrastAuto(tmp,tmp);
 	ImageUtil::USM(tmp,tmp);
 	//ImageUtil::LaplaceEnhannce(tmp,tmp);
 	dstImage = tmp.clone();

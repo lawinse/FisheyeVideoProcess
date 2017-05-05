@@ -57,9 +57,13 @@ struct OpenCVStitchParam {
 		bool isRealStitching;
 
 		OpenCVStitchParam() {
-			workMegapix = 0.6;
+			workMegapix = -1;
 			seamMegapix = 0.1;
+	#ifdef RT_X64
 			composeMegapix = -1;
+	#else
+			composeMegapix = 0.8;
+	#endif
 			conf_thresh = 0.7;
 			wave_correct = cv::detail::WAVE_CORRECT_HORIZ;
 			expos_comp_type = cv::detail::ExposureCompensator::GAIN_BLOCKS;
@@ -121,12 +125,12 @@ public:
 
 /* A window-size of <class StitchingInfoGroup> */
 class LocalStitchingInfoGroup {
-	#define LSIG_WINDOW_SIZE 10		// Set to INT_MAX meaning Global
+	#define LSIG_WINDOW_SIZE	10		// Set to INT_MAX meaning Global
 	#define LSIG_MOVING_WINDOWS 0	// Indicate whehter the window is moved or fixed
 	#define LSIG_BEST_CAND_NUM 1
 	#define LSIG_SELECT_NUM LSIG_BEST_CAND_NUM
-	#define LSIG_MAX_STITCHED_BUFF_SIZE 3
-	#define LSIG_MAX_WAITING_BUFF_SIZE 5
+	#define LSIG_MAX_STITCHED_BUFF_SIZE 0
+	#define LSIG_MAX_WAITING_BUFF_SIZE 0
 	int wSize;
 	IntervalBestValueMaintainer<StitchingInfoGroup,double> groups;
 	StitchingInfoGroup preSuccessSIG;
@@ -188,16 +192,24 @@ private:
 	#define kFlannMaxDistScale 3
 	#define kFlannMaxDistThreshold 0.04
 	#define kFlannNumTrees 4 // by default
-	#define OVERLAP_RATIO_DOUBLESIDE 0.20
-	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8) 	/* widthParam = 0.20, heightParam = 0.8 by default*/
+	#define OVERLAP_RATIO_DOUBLESIDE 0.25
+	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.7) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
 	#define BLACK_TOLERANCE 3
 	#define NONBLACK_REMAIN_FLOOR 0.70
 
 	/* Unify the resized size of each step */
-	#define FIX_RESIZE_0 Size(1440,1440)
-	#define FIX_RESIZE_1 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
-	#define FIX_RESIZE_2 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
+#ifdef RT_X64
+	#define FIX_RESIZE_0 Size(0,0)
+	#define FIX_RESIZE_1 Size(0,0)
+	#define FIX_RESIZE_2 Size(0,0)
+#elif (defined RT_WIN32)
+	#define FIX_RESIZE_0 Size(0,0)
+	//#define FIX_RESIZE_1 Size(2020,1440)
+	//#define FIX_RESIZE_2 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
+	#define FIX_RESIZE_1 Size(2220,1440)
+	#define FIX_RESIZE_2 Size(2020,1440)
+#endif
 
 	
 	/* Original opencv Stitcher. Deprecated*/

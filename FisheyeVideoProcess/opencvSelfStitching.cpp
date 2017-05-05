@@ -3,7 +3,7 @@
 #include "Supplements\Matchers.h"
 #include "Supplements\RewarpableWarper.h"
 
-#define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
+#define USE_WARPER_TYPE 2		// 0->Cyl   1->Mer   2->Sph
 
 #if USE_WARPER_TYPE==1	
 #define CREATE_WAPPER_POINTER(a,b)	\
@@ -60,18 +60,19 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			full_img1 = srcs[i].clone();
 			ImageUtil::resize(full_img1,full_img, sInfo.resizeSz,0,0);
 			full_img_sizes[i] = full_img.size();
-			if (osParam.workMegapix < 0) {
-				img = full_img;
-				work_scale = 1;
-				is_work_scale_set = true;
-			} else {
-				if (!is_work_scale_set) {
+			if (!is_work_scale_set) {
+				if (osParam.workMegapix < 0) {
+					work_scale = min(1.0, -osParam.workMegapix);
+				} else {
 					work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
-					is_work_scale_set = true;
 				}
-				ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
-
+				is_work_scale_set = true;
 			}
+
+			if (work_scale < 1.0) 
+					ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
+			else 
+				img = full_img;
 			if (!is_seam_scale_set) {
 				seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
 				seam_work_aspect = seam_scale / work_scale;
@@ -97,18 +98,19 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 			ImageUtil::resize(full_img1,full_img, sInfo.resizeSz, 0,0);
 			full_img_sizes[i] = full_img.size();
 
-			if (osParam.workMegapix < 0) {
-				img = full_img;
-				work_scale = 1;
-				is_work_scale_set = true;
-			} else {
-				if (!is_work_scale_set) {
+			if (!is_work_scale_set) {
+				if (osParam.workMegapix < 0) {
+					work_scale = min(1.0, -osParam.workMegapix);
+				} else {
 					work_scale = min(1.0, sqrt(osParam.workMegapix * 1e6 / full_img.size().area()));
-					is_work_scale_set = true;
 				}
-				ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
-
+				is_work_scale_set = true;
 			}
+
+			if (work_scale < 1.0) 
+					ImageUtil::resize(full_img, img, Size(), work_scale, work_scale);
+			else 
+				img = full_img;
 
 			if (!is_seam_scale_set) {
 				seam_scale = min(1.0, sqrt(osParam.seamMegapix * 1e6 / full_img.size().area()));
@@ -185,11 +187,8 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 	if (cameras.size() == 2) {
 		double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
 		if (relative_focal_ratio < ERR) {
-			//ImageUtil::imshow("0",srcs[0],0.25);
-			//ImageUtil::imshow("1",srcs[1],0.25);
-			//cvWaitKey();
-			LOG_ERR("Terrible cam estimation: Cam#0: " << cameras[0].focal << ", Cam#1: " <<cameras[1].focal);
-			return sInfo;
+			LOG_MESS("Cam focal estimation nearly the same: Cam#0: " << cameras[0].focal << ", Cam#1: " <<cameras[1].focal);
+			//return sInfo;
 		}
 			
 	}
@@ -263,6 +262,8 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		if (!is_compose_scale_set) {
 			if (osParam.composeMegapix > 0) 
 				compose_scale = min(1.0, sqrt(osParam.composeMegapix * 1e6 / full_img.size().area()));
+			else 
+				compose_scale = min(1.0, -osParam.composeMegapix);
 			is_compose_scale_set = true;
 			compose_work_aspect = compose_scale / work_scale;
 			warped_image_scale *= static_cast<float>(compose_work_aspect);
