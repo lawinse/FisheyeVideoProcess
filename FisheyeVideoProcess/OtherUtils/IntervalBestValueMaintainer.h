@@ -40,7 +40,6 @@ public:
 
 		if (fidx != range.second) {
 			LOG_ERR("IntervalBestValueMaintainer: Inconsistency occurs when adding candidates.");
-			LOG_ERR(this);
 			return false;
 		}
 
@@ -61,9 +60,7 @@ public:
 			idxMap.erase(idxMap.begin());
 		}
 		if (preSize - idxMap.size() > 1) {
-			LOG_ERR(
-				"IntervalBestValueMaintainer: Inconsistency occurs when adding candidates (evicting the old).");
-			LOG_ERR(this);
+			LOG_ERR("IntervalBestValueMaintainer: Inconsistency occurs when adding candidates (evicting the old).");
 			return false;
 		}
 
@@ -104,7 +101,6 @@ public:
 		if (idxMap.find(fidx) != idxMap.end()) {
 			return (*(idxMap[fidx])).first.first;
 		} else {
-			LOG_MESS(this);
 			return ItemType();
 		}
 	}

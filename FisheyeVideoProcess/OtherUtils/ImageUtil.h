@@ -1,7 +1,113 @@
 #pragma once
 #include "..\Config.h"
 class ImageUtil {
+	#define BLACK_TOLERANCE 3
+private:
+	static bool checkInterior(const Mat& mask, const Rect& interiorBB, bool& top, bool& bottom, bool& left, bool& right) {
+		bool ret = true;
+		Mat sub = mask(interiorBB);
+		int x=0,y=0;
+		int _top = 0, _bottom = 0, _left = 0, _right = 0;
+
+		for (; x<sub.cols; ++x) {
+			if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+				ret = false;
+				++_top;
+			}
+		}
+		for (y=sub.rows-1, x=0; x<sub.cols; ++x) {
+			if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+				ret = false;
+				++_bottom;
+			}
+		}
+		for (x=0,y=0; y<sub.rows; ++y) {
+			if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+				ret = false;
+				++_left;
+			}
+		}
+		for (x=sub.cols-1,y=0; y<sub.rows; ++y) {
+			if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
+				ret = false;
+				++_right;
+			}
+		}
+
+		if (_top > _bottom) {
+			top = (_top > _left && _top > _right);
+		} else {
+			bottom = (_bottom > _left && _bottom > _right);
+		}
+
+		if (_left >= _right) {
+			left = (_left >= _bottom && _left >= _top);
+		} else {
+			right = (_right >= _top && _right >= _bottom);
+		}
+		return ret;
+	}
+
 public:
+	static bool almostBlack(const Vec3b &v) {
+		const int tolerance = square(3*BLACK_TOLERANCE);
+		return v[0]*v[0] + v[1]*v[1] + v[2]*v[2] <= tolerance;
+	}
+	// REF: http://stackoverflow.com/questions/21410449/how-do-i-crop-to-largest-interior-bounding-box-in-opencv
+	static bool removeBlackPixelByContourBound(Mat &src, Mat &dst, Rect &interiorBoundingBox) {
+		Mat grayscale;
+		cvtColor(src, grayscale, CV_BGR2GRAY);
+		Mat mask = grayscale > BLACK_TOLERANCE;
+
+		std::vector<std::vector<Point>> contours;
+		std::vector<Vec4i> hierarchy;
+
+		findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE, Point(0,0));
+		Mat contourImg = Mat::zeros(src.size(), CV_8UC3);
+
+		int maxSz = 0, id = 0;
+		for (int i=0; i<contours.size(); ++i) {
+			if (contours.at(i).size() > maxSz) {
+				maxSz = contours.at(i).size();
+				id = i;
+			}
+		}
+
+		Mat contourMask = cv::Mat::zeros(src.size(), CV_8UC1);
+		drawContours(contourMask, contours, id, Scalar(255), -1, 8, hierarchy,0,Point());
+
+		std::vector<Point> cSortedX = contours.at(id);
+		std::sort(cSortedX.begin(), cSortedX.end(), [](const Point &a, const Point &b){return a.x<b.x;});
+		std::vector<Point> cSortedY = contours.at(id);
+		std::sort(cSortedY.begin(), cSortedY.end(), [](const Point &a, const Point &b){return a.y<b.y;});
+		int minX = 0, maxX = cSortedX.size()-1;
+		int minY = 0, maxY = cSortedY.size()-1;
+
+
+		while(minX < maxX && minY < maxY) {
+			Point minP(cSortedX[minX].x, cSortedY[minY].y);
+			Point maxP(cSortedX[maxX].x, cSortedY[maxY].y);
+			interiorBoundingBox = Rect(minP.x, minP.y, maxP.x-minP.x, maxP.y-minP.y);
+			// out-codes
+			bool ocTop = false, ocBottom = false, ocLeft = false, ocRight = false;
+
+			if (checkInterior(contourMask, interiorBoundingBox, ocTop, ocBottom, ocLeft, ocRight))
+				break;
+			if (ocLeft) ++minX;
+			if (ocRight)--maxX;
+			if (ocTop) ++minY;
+			if (ocBottom) --maxY;
+			if (!(ocLeft || ocRight || ocTop || ocBottom)) {
+				LOG_WARN("removeBlackPixelByContourBound() failed.");
+				return false;
+			}
+		}
+		double restRatioPercent = interiorBoundingBox.size().area()*1.0/src.size().area();
+		dst = src(interiorBoundingBox).clone();
+		return true;
+	}
+
+
 	/* USM sharpening process */
 	static void USM(Mat &src, Mat &dst) {
 		Mat blur, tmp2; 

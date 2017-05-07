@@ -57,7 +57,11 @@ struct OpenCVStitchParam {
 		bool isRealStitching;
 
 		OpenCVStitchParam() {
+	#if (INPUT_FISHEYE_LENGTH==2880)
+			workMegapix = -0.5;
+	#else
 			workMegapix = -1;
+	#endif
 			seamMegapix = 0.1;
 	#ifdef RT_X64
 			composeMegapix = -1;
@@ -195,7 +199,6 @@ private:
 	#define OVERLAP_RATIO_DOUBLESIDE 0.25
 	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
-	#define BLACK_TOLERANCE 3
 	#define NONBLACK_REMAIN_FLOOR 0.70
 
 	/* Unify the resized size of each step */
@@ -231,7 +234,7 @@ private:
 	void matchWithAKAZE(const Mat&, const Mat&, std::vector<std::pair<Point2f, Point2f>>& );
 #endif
 	/* Indicates whether a BGR pixel is considered black */
-	static bool almostBlack(const Vec3b &);
+	
 	void showMatchingPair(
 		const Mat &left, const std::vector<KeyPoint> &kptL,
 		const Mat &right, const std::vector<KeyPoint> &kptR, const std::vector<DMatch> &goodMatches);
@@ -250,7 +253,6 @@ private:
 	/* Different ways to find max interior rectangle to remove black pixels surrounded */
 	static bool removeBlackPixelByDoubleScan(Mat &, Mat &, StitchingInfo &);
 	static bool removeBlackPixelByContourBound(Mat &, Mat &, StitchingInfo &);
-	static bool checkInterior(const Mat& mask, const Rect& interiorBB, bool &top, bool &bottom, bool &left, bool &right);
 public:
 	OpenCVStitchParam osParam;
 	StitchingType stitchingType;

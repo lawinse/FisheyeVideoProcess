@@ -9,10 +9,15 @@
 #define OUTPUT_PANO_SIZE Size(INPUT_FISHEYE_LENGTH*2,INPUT_FISHEYE_LENGTH)
 
 class Processor {
-#define camCnt 2
 private:
-	VideoCapture vCapture[camCnt];	// 0 stands for front and 1 stands for back, maybe more cam
+	VideoCapture vCapture[CAMERA_CNT];	// 0 stands for front and 1 stands for back, maybe more cam
 	VideoWriter vWriter;
+
+#ifdef FISHEYE_DESHAKE
+	VideoWriter vWriterDeshakeTemp[CAMERA_CNT];
+	std::string deshakeVidNameBefore[CAMERA_CNT];
+	std::string deshakeVidNameAfter[CAMERA_CNT];
+#endif
 	
 	int radiusOfCircle;
 	Point2i centerOfCircleBeforeResz;

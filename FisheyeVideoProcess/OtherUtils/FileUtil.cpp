@@ -17,8 +17,8 @@ std::string FileUtil::getExtension(FILE_STORAGE_TYPE fst) {
 }
 
 bool FileUtil::findOrCreateDir(const char * path) {
-	if (access(path,0) == -1) {
-		int flg = mkdir(path);
+	if (_access(path,0) == -1) {
+		int flg = _mkdir(path);
 		if (flg == 0) return true;
 		else {
 			LOG_ERR("FileUtil: Creating " << path << " failed.");
@@ -36,7 +36,7 @@ bool FileUtil::deleteFile(const char * fn, bool delay) {
 		LOG_WARN("Fileutil: " << fn << " is pushed into waitToDeleteBuff.")
 		return false;
 	}
-	if(!access(fn,0)) {
+	if(!_access(fn,0)) {
 		if (remove(fn)) {
 			LOG_ERR("FileUtil: Failed when deleting " << fn << " (UNKNOWN)");
 			return false;
@@ -65,8 +65,8 @@ bool FileUtil::findOrCreateAllDirsNeeded() {
 		&& findOrCreateDir(TEMP_PATH)
 		&& findOrCreateDir(LOG_PATH)) {
 #ifdef FU_COMPRESS_FLAG
-			if (access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files\\WinRAR\\Rar.exe\" .\\rar.exe");
-			if (access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files (x86)\\WinRAR\\Rar.exe\" .\\rar.exe");
+			if (_access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files\\WinRAR\\Rar.exe\" .\\rar.exe");
+			if (_access(FU_RAROBJ,0)) system("copy /Y \"C:\\Program Files (x86)\\WinRAR\\Rar.exe\" .\\rar.exe");
 #endif
 			return true;
 	} else {
@@ -226,14 +226,14 @@ bool FileUtil::LoadMatBinary(const std::string& filename, cv::Mat& output) {
 }
 
 void FileUtil::compress(const std::string&fname) {
-	if(access(FU_RAROBJ,0)) return;
+	if(_access(FU_RAROBJ,0)) return;
 	std::string cmd = std::string(FU_RAROBJ) + " a -df -m5 -idcdpq "+ fname+FU_COMPRESS_EXTENSION + " " + fname;
 	waitToDeleteBuff.insert(fname+FU_COMPRESS_EXTENSION);
 	system(cmd.c_str());
 }
 
 void FileUtil::decompress(const std::string&fname) {
-	if(access(FU_RAROBJ,0)) return;
+	if(_access(FU_RAROBJ,0)) return;
 	std::string cmd = std::string(FU_RAROBJ) + " x -idcdpq "+ fname+FU_COMPRESS_EXTENSION;               
 	system(cmd.c_str());
 }

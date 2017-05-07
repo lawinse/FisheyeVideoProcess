@@ -22,8 +22,9 @@ using namespace cv;
 #endif
 
 #define INPUT_FISHEYE_LENGTH 1440
+#define CAMERA_CNT 2
 
-#define FISHEYE_DESHAKE false
+//#define FISHEYE_DESHAKE
 
 
 #define OPENCV_3

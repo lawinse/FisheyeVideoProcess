@@ -403,7 +403,6 @@ StitchingInfoGroup StitchingUtil::_stitchDoubleSide(
 				.clone());
 		// dstTmp: F-B-F
 		osParam.blend_strength = 1;
-		osParam.blend_type = cv::detail::Blender::FEATHER;
 		//ImageUtil::imshow("1", tmpSrc[0], FIX_RESIZE_1,0.4);
 		//ImageUtil::imshow("2", tmpSrc[1], FIX_RESIZE_1,0.4,true);
 		sInfoG.push_back(_stitch(tmpSrc,dstTmp,sType, sInfoGNotNull.empty() ? StitchingInfo() : sInfoGNotNull[2], FIX_RESIZE_1,std::make_pair(overlapRatio_tolerance1,0.9)));	
@@ -513,12 +512,6 @@ std::vector<UMat> StitchingUtil::convertMatToUMat(std::vector<Mat> &input) {
 	return ret;
 }
 
-bool StitchingUtil::almostBlack(const Vec3b &v) {
-	const int tolerance = square(3*BLACK_TOLERANCE);
-	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2] <= tolerance;
-}
-
-
 bool StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingInfo &sInfo) {
 	// first find width boundary, better for stitching
 	Mat_<Vec3b> tmpSrc = src;
@@ -528,14 +521,14 @@ bool StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingIn
 	int maxRows = tmpSrc.rows-1, minRows = 0;
 	int maxCols = tmpSrc.cols-1, minCols = 0;
 	for (int j=heightSideTolerance; j < tmpSrc.rows- heightSideTolerance; ++j) {
-		for (;maxCols>=0&&almostBlack(tmpSrc(j, maxCols)); --maxCols);
-		for (;minCols<tmpSrc.cols&&almostBlack(tmpSrc(j, minCols)); ++minCols);
+		for (;maxCols>=0&&ImageUtil::almostBlack(tmpSrc(j, maxCols)); --maxCols);
+		for (;minCols<tmpSrc.cols&&ImageUtil::almostBlack(tmpSrc(j, minCols)); ++minCols);
 	}
 	
 	// then find height boundary
 	for (int i=minCols; i<=maxCols; ++i) {
-		for (;maxRows>=0 && almostBlack(tmpSrc(maxRows, i)); --maxRows);
-		for (;minRows<tmpSrc.rows&&almostBlack(tmpSrc(minRows, i)); ++minRows);
+		for (;maxRows>=0 && ImageUtil::almostBlack(tmpSrc(maxRows, i)); --maxRows);
+		for (;minRows<tmpSrc.rows&&ImageUtil::almostBlack(tmpSrc(minRows, i)); ++minRows);
 	}
 
 	double restRatioPercent = (maxRows-minRows+1)*(maxCols-minCols+1)*1.0/(tmpSrc.cols*tmpSrc.rows);
@@ -557,55 +550,10 @@ bool StitchingUtil::removeBlackPixelByDoubleScan(Mat &src, Mat &dst, StitchingIn
 }
 // REF: http://stackoverflow.com/questions/21410449/how-do-i-crop-to-largest-interior-bounding-box-in-opencv
 bool StitchingUtil::removeBlackPixelByContourBound(Mat &src, Mat &dst, StitchingInfo &sInfo) {
-	Mat grayscale;
-	cvtColor(src, grayscale, CV_BGR2GRAY);
-	Mat mask = grayscale > BLACK_TOLERANCE;
-
-	std::vector<std::vector<Point>> contours;
-	std::vector<Vec4i> hierarchy;
-
-	findContours(mask, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE, Point(0,0));
-	Mat contourImg = Mat::zeros(src.size(), CV_8UC3);
-
-	int maxSz = 0, id = 0;
-	for (int i=0; i<contours.size(); ++i) {
-		if (contours.at(i).size() > maxSz) {
-			maxSz = contours.at(i).size();
-			id = i;
-		}
-	}
-
-	Mat contourMask = cv::Mat::zeros(src.size(), CV_8UC1);
-	drawContours(contourMask, contours, id, Scalar(255), -1, 8, hierarchy,0,Point());
-
-	std::vector<Point> cSortedX = contours.at(id);
-	std::sort(cSortedX.begin(), cSortedX.end(), [](const Point &a, const Point &b){return a.x<b.x;});
-	std::vector<Point> cSortedY = contours.at(id);
-	std::sort(cSortedY.begin(), cSortedY.end(), [](const Point &a, const Point &b){return a.y<b.y;});
-	int minX = 0, maxX = cSortedX.size()-1;
-	int minY = 0, maxY = cSortedY.size()-1;
-
 	Rect interiorBoundingBox;
+	bool ret = ImageUtil::removeBlackPixelByContourBound(src, dst, interiorBoundingBox);
 
-	while(minX < maxX && minY < maxY) {
-		Point minP(cSortedX[minX].x, cSortedY[minY].y);
-		Point maxP(cSortedX[maxX].x, cSortedY[maxY].y);
-		interiorBoundingBox = Rect(minP.x, minP.y, maxP.x-minP.x, maxP.y-minP.y);
-		// out-codes
-		bool ocTop = false, ocBottom = false, ocLeft = false, ocRight = false;
-
-		if (checkInterior(contourMask, interiorBoundingBox, ocTop, ocBottom, ocLeft, ocRight))
-			break;
-		if (ocLeft) ++minX;
-		if (ocRight)--maxX;
-		if (ocTop) ++minY;
-		if (ocBottom) --maxY;
-		if (!(ocLeft || ocRight || ocTop || ocBottom)) {
-			LOG_WARN("removeBlackPixelByContourBound() failed. Using removeBlackPixelByDoubleScan() instead.");
-			return false;
-		}
-
-	}
+	if (!ret) return ret;
 	double restRatioPercent = interiorBoundingBox.size().area()*1.0/src.size().area();
 	LOG_MESS("Remove black pixel, remain:" << interiorBoundingBox << " " << restRatioPercent*100 << "%%");
 	dst = src(interiorBoundingBox).clone();
@@ -621,51 +569,6 @@ bool StitchingUtil::removeBlackPixelByContourBound(Mat &src, Mat &dst, Stitching
 	sInfo.setRanges(Range(interiorBoundingBox.tl().x, interiorBoundingBox.tl().x+interiorBoundingBox.width));
 	sInfo.nonBlackRatio = restRatioPercent;
 	return true;
-}
-
-bool StitchingUtil::checkInterior(const Mat& mask, const Rect& interiorBB, bool& top, bool& bottom, bool& left, bool& right) {
-	bool ret = true;
-	Mat sub = mask(interiorBB);
-	int x=0,y=0;
-	int _top = 0, _bottom = 0, _left = 0, _right = 0;
-
-	for (; x<sub.cols; ++x) {
-		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
-			ret = false;
-			++_top;
-		}
-	}
-	for (y=sub.rows-1, x=0; x<sub.cols; ++x) {
-		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
-			ret = false;
-			++_bottom;
-		}
-	}
-	for (x=0,y=0; y<sub.rows; ++y) {
-		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
-			ret = false;
-			++_left;
-		}
-	}
-	for (x=sub.cols-1,y=0; y<sub.rows; ++y) {
-		if (sub.at<unsigned char>(y,x) <= BLACK_TOLERANCE) {
-			ret = false;
-			++_right;
-		}
-	}
-
-	if (_top > _bottom) {
-		top = (_top > _left && _top > _right);
-	} else {
-		bottom = (_bottom > _left && _bottom > _right);
-	}
-
-	if (_left >= _right) {
-		left = (_left >= _bottom && _left >= _top);
-	} else {
-		right = (_right >= _top && _right >= _bottom);
-	}
-	return ret;
 }
 
 void StitchingUtil::removeBlackPixel(Mat &src, Mat &dst, StitchingInfo &sInfo) {

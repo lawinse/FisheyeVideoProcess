@@ -2,6 +2,7 @@
 #include "CorrectingUtil.h"
 #include "OtherUtils\ImageUtil.h"
 #include "OtherUtils\FileUtil.h"
+#include "OtherUtils\StablizeUtil.h"
 
 Processor::Processor(LocalStitchingInfoGroup *_pLSIG) {
 	FileUtil::findOrCreateAllDirsNeeded();	// create or validate necessary folders and files
@@ -38,12 +39,21 @@ void Processor::findFisheyeCircleRegion(Mat &frm) {
 
 void Processor::setPaths(std::string inputPaths[], int inputCnt, std::string outputPath) {
 	for (int i=0; i<inputCnt; ++i) vCapture[i].open(inputPaths[i]);
-	assert(camCnt == inputCnt);
+	assert(CAMERA_CNT == inputCnt);
 	
 	
 	vWriter = VideoWriter(
 		outputPath, CV_FOURCC('D', 'I', 'V', 'X'),
 		fps = vCapture[0].get(CV_CAP_PROP_FPS), dstPanoSize);
+
+
+#ifdef FISHEYE_DESHAKE
+	for (int i=0; i<CAMERA_CNT; ++i) {
+		vWriterDeshakeTemp[i] = VideoWriter(deshakeVidNameBefore[i]=StablizeUtil::getCorrectedVideoName(inputPaths[i],fps,inputFisheyeResize),
+			CV_FOURCC('D', 'I', 'V', 'X'),fps, inputFisheyeResize);
+		deshakeVidNameAfter[i] = StablizeUtil::getStabCorrectedVideoName(inputPaths[i],fps,inputFisheyeResize);
+	}
+#endif
 
 	std::cout << "[BASIC INFO]" << std::endl;
 	std::cout << "INPUT: (FPS=" << fps << ")" <<  std::endl;
@@ -144,14 +154,14 @@ void Processor::panoRefine(Mat &srcImage, Mat &dstImage) {
 }
 
 void Processor::process(int maxSecondsCnt, int startFrame) {
-	std::vector<Mat> srcFrms(camCnt);
-	std::vector<Mat> dstFrms(camCnt);
+	std::vector<Mat> srcFrms(CAMERA_CNT);
+	std::vector<Mat> dstFrms(CAMERA_CNT);
 	ttlFrmsCnt = fps*(maxSecondsCnt)+startFrame;
 	curStitchingIdx = startFrmsCnt = startFrame;
 	int fIndex = 0;
 	while (fIndex < startFrame) {
 		Mat tmp;
-		for (int i=0; i<camCnt; ++i) {
+		for (int i=0; i<CAMERA_CNT; ++i) {
 			vCapture[i] >> tmp;
 		}
 		fIndex++;
@@ -163,10 +173,10 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 #ifdef TRY_CATCH
 		try {
 #endif
-			std::vector<Mat> tmpFrms(camCnt);
+			std::vector<Mat> tmpFrms(CAMERA_CNT);
 			Mat dstImage;
 
-			for (int i=0; i<camCnt; ++i) {
+			for (int i=0; i<CAMERA_CNT; ++i) {
 				vCapture[i] >> tmpFrms[i];
 				if (tmpFrms[i].empty()) break;
 				preProcess(tmpFrms[i], tmpFrms[i]);
@@ -191,17 +201,22 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 				isSetCenter = true;
 			}
 			LOG_MESS("\tCorrecting ..." );
-			for (int i=0; i<camCnt; ++i) {
+			for (int i=0; i<CAMERA_CNT; ++i) {
 				/*blackenOutsideRegion(srcFrms[i]);*/
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
 				//ImageUtil::imshow("dstFrm",dstFrms[i],0.5,true);
 				
 			}
-			if (!FISHEYE_DESHAKE) {
-				LOG_MESS("\tStitching ...");
-				panoStitch(dstFrms, fIndex);
-				/*vWriter << dstFrms[1];*/
+	#ifdef FISHEYE_DESHAKE 
+			for (int i=0; i<CAMERA_CNT; ++i) {
+				vWriterDeshakeTemp[i] << dstFrms[i];
 			}
+	#else
+			LOG_MESS("\tStitching ...");
+			panoStitch(dstFrms, fIndex);
+			/*vWriter << dstFrms[1];*/
+	#endif
+
 
 #ifdef TRY_CATCH
 		} catch (cv::Exception e) {
@@ -214,6 +229,29 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 		
 		++fIndex;
 	}
+
+#ifdef FISHEYE_DESHAKE
+	for (int i=0; i<CAMERA_CNT; ++i) {
+		vWriterDeshakeTemp[i].release();
+		StablizeUtil::Stablize(deshakeVidNameBefore[i].c_str(), deshakeVidNameAfter[i].c_str());
+		vCapture[i].release();
+		vCapture[i].open(deshakeVidNameAfter[i]);
+	}
+
+	fIndex = startFrame;
+	while (fIndex < ttlFrmsCnt) {
+		LOG_MARK("Processing " << fIndex  << "/" << ttlFrmsCnt-1 << " frame ...");
+		for (int i=0; i<CAMERA_CNT; ++i) {
+			vCapture[i] >> dstFrms[i];
+			LOG_MESS("\tStitching ...");
+			
+		}
+		panoStitch(dstFrms, fIndex);
+		++fIndex;
+	}
+#endif
+
+
 	persistPano(true);	//final flush
 }
 

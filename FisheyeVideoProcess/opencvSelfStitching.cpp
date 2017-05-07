@@ -188,7 +188,7 @@ StitchingInfo StitchingUtil::opencvSelfStitching(
 		double relative_focal_ratio = abs((cameras[1].focal-cameras[0].focal)*1.0/cameras[0].focal);
 		if (relative_focal_ratio < ERR) {
 			LOG_MESS("Cam focal estimation nearly the same: Cam#0: " << cameras[0].focal << ", Cam#1: " <<cameras[1].focal);
-			//return sInfo;
+			return sInfo;
 		}
 			
 	}
