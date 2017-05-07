@@ -7,6 +7,7 @@
 
 #define INPUT_FISHEYE_RESIZE Size(INPUT_FISHEYE_LENGTH,INPUT_FISHEYE_LENGTH)
 #define OUTPUT_PANO_SIZE Size(INPUT_FISHEYE_LENGTH*2,INPUT_FISHEYE_LENGTH)
+
 class Processor {
 #define camCnt 2
 private:
@@ -17,6 +18,7 @@ private:
 	Point2i centerOfCircleBeforeResz;
 	Point2i centerOfCircleAfterResz;
 	int fps;
+	int startFrmsCnt;
 	int ttlFrmsCnt;
 	Size inputFisheyeResize;
 	Size dstPanoSize;

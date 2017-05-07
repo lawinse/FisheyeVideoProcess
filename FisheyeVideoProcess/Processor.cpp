@@ -22,7 +22,7 @@ void Processor::calculateWinSz(int fidx, int &lidx, int &ridx) {
 #if (!LSIG_MOVING_WINDOWS) 
 	fidx=0;
 #endif
-	lidx = max(0, fidx-LSIG_WINDOW_SIZE/2);
+	lidx = max(startFrmsCnt, fidx-LSIG_WINDOW_SIZE/2);
 	ridx = min(ttlFrmsCnt, lidx + LSIG_WINDOW_SIZE);
 	lidx = min(lidx, ridx-LSIG_WINDOW_SIZE);
 }
@@ -147,6 +147,7 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 	std::vector<Mat> srcFrms(camCnt);
 	std::vector<Mat> dstFrms(camCnt);
 	ttlFrmsCnt = fps*(maxSecondsCnt)+startFrame;
+	curStitchingIdx = startFrmsCnt = startFrame;
 	int fIndex = 0;
 	while (fIndex < startFrame) {
 		Mat tmp;
@@ -189,15 +190,19 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 				centerOfCircleAfterResz.y = srcFrms[0].rows/2;
 				isSetCenter = true;
 			}
-			std::cout << "\tCorrecting ..." <<std::endl;
+			LOG_MESS("\tCorrecting ..." );
 			for (int i=0; i<camCnt; ++i) {
 				/*blackenOutsideRegion(srcFrms[i]);*/
 				fisheyeCorrect(srcFrms[i], dstFrms[i]);
 				//ImageUtil::imshow("dstFrm",dstFrms[i],0.5,true);
 				
 			}
-			std::cout << "\tStitching ..." <<std::endl;
-			panoStitch(dstFrms, fIndex);
+			if (!FISHEYE_DESHAKE) {
+				LOG_MESS("\tStitching ...");
+				panoStitch(dstFrms, fIndex);
+				/*vWriter << dstFrms[1];*/
+			}
+
 #ifdef TRY_CATCH
 		} catch (cv::Exception e) {
 			
@@ -208,7 +213,6 @@ void Processor::process(int maxSecondsCnt, int startFrame) {
 #endif
 		
 		++fIndex;
-
 	}
 	persistPano(true);	//final flush
 }

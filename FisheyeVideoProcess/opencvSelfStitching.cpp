@@ -3,7 +3,7 @@
 #include "Supplements\Matchers.h"
 #include "Supplements\RewarpableWarper.h"
 
-#define USE_WARPER_TYPE 2		// 0->Cyl   1->Mer   2->Sph
+#define USE_WARPER_TYPE 0		// 0->Cyl   1->Mer   2->Sph
 
 #if USE_WARPER_TYPE==1	
 #define CREATE_WAPPER_POINTER(a,b)	\

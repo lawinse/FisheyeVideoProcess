@@ -4,6 +4,7 @@
 #include "OtherUtils\ImageUtil.h"
 #include "Supplements\RewarpableWarper.h"
 #include "OtherUtils\FileUtil.h"
+#include "OtherUtils\StablizeUtil.h"
 #include "MyLog.h"
 #include <algorithm>
 using namespace std;
@@ -69,6 +70,11 @@ public:
 
 	void test5() {
 		FileUtil::decompress(TEMP_PATH+std::string("58e6f398_24M58e6f398241.bin"));
+	}
+
+	void test6() {
+		//StablizeUtil::Stablize(((std::string)RESOURCE_PATH+"front.mp4").c_str());
+		std::cout << std::hash<std::string>()("dsdsdfgagfsffd.mp4") << endl;
 	}
 
 

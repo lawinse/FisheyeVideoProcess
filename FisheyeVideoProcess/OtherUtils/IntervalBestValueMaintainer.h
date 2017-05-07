@@ -32,6 +32,12 @@ public:
 	}
 
 	bool addCandidate(int fidx, ItemType& g) {
+		static bool isFreshStart = true;
+		if (isFreshStart) {
+			range.first = range.second = fidx;
+			isFreshStart = false;
+		}
+
 		if (fidx != range.second) {
 			LOG_ERR("IntervalBestValueMaintainer: Inconsistency occurs when adding candidates.");
 			LOG_ERR(this);

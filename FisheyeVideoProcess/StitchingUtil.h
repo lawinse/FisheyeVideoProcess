@@ -193,7 +193,7 @@ private:
 	#define kFlannMaxDistThreshold 0.04
 	#define kFlannNumTrees 4 // by default
 	#define OVERLAP_RATIO_DOUBLESIDE 0.25
-	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.7) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
+	#define defaultMaskRatio std::make_pair(OVERLAP_RATIO_DOUBLESIDE,0.8) 	/* widthParam = 0.25, heightParam = 0.8 by default*/
 	#define OVERLAP_RATIO_DOUBLESIDE_4 0.15
 	#define BLACK_TOLERANCE 3
 	#define NONBLACK_REMAIN_FLOOR 0.70
@@ -201,14 +201,14 @@ private:
 	/* Unify the resized size of each step */
 #ifdef RT_X64
 	#define FIX_RESIZE_0 Size(0,0)
-	#define FIX_RESIZE_1 Size(0,0)
-	#define FIX_RESIZE_2 Size(0,0)
+	#define FIX_RESIZE_1 Size(int(INPUT_FISHEYE_LENGTH*1.55),INPUT_FISHEYE_LENGTH)
+	#define FIX_RESIZE_2 Size(int(INPUT_FISHEYE_LENGTH*1.40),INPUT_FISHEYE_LENGTH)
 #elif (defined RT_WIN32)
 	#define FIX_RESIZE_0 Size(0,0)
 	//#define FIX_RESIZE_1 Size(2020,1440)
 	//#define FIX_RESIZE_2 Size(int(1440*(1+OVERLAP_RATIO_DOUBLESIDE)),1440)
-	#define FIX_RESIZE_1 Size(2220,1440)
-	#define FIX_RESIZE_2 Size(2020,1440)
+	#define FIX_RESIZE_1 Size(2220,1440)	//2220
+	#define FIX_RESIZE_2 Size(2020,1440)	//2020
 #endif
 
 	

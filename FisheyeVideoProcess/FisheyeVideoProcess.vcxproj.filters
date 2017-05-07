@@ -51,6 +51,9 @@
     <ClInclude Include="OtherUtils\IntervalBestValueMaintainer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="OtherUtils\StablizeUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Processor.cpp">

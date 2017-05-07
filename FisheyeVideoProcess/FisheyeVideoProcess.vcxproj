@@ -155,6 +155,7 @@
   <ItemGroup>
     <ClInclude Include="OtherUtils\FileUtil.h" />
     <ClInclude Include="OtherUtils\IntervalBestValueMaintainer.h" />
+    <ClInclude Include="OtherUtils\StablizeUtil.h" />
     <ClInclude Include="Supplements\RewarpableWarper.h" />
     <ClInclude Include="Supplements\Matchers.h" />
     <ClInclude Include="Config.h" />

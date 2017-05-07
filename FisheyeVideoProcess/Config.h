@@ -23,6 +23,8 @@ using namespace cv;
 
 #define INPUT_FISHEYE_LENGTH 1440
 
+#define FISHEYE_DESHAKE false
+
 
 #define OPENCV_3
 #ifndef OPENCV_3
